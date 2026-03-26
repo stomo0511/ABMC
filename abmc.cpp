@@ -159,8 +159,9 @@ int main(int argc, char** argv) {
 
     //////////////////////////////////////////////
     // デバッグ用出力
-    std::printf("ABMC blocking with %s\n", policy_name(policy));
-    std::printf("#blocks=%d, block size=%d\n", B, part.s);
+    // std::printf("ABMC blocking with %s\n", policy_name(policy));
+    // std::printf("#blocks=%d, block size=%d\n", B, part.s);
+    std::cout << "NB = " << B;
     // DumpBlocks(part);
 
     //////////////////////////////////////////////
@@ -179,7 +180,7 @@ int main(int argc, char** argv) {
         //           << ", internal_edges=" << internal[b]
         //           << ", avg_deg=" << avg_deg << "\n";
     }
-    std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+    // std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロック間結合度の評価
@@ -203,8 +204,8 @@ int main(int argc, char** argv) {
         // std::cout << "Block " << b << ": degree=" << deg << "\n";
         total_avg += deg;
     }
-    std::cout << "Block graph average degree: "
-              << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+    // std::cout << "Block graph average degree: "
+    //           << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
@@ -232,9 +233,10 @@ int main(int argc, char** argv) {
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
+    std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
     double Q = Modularity_Unweighted(G, part.block_of);
-    std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
     return 0;
 }
