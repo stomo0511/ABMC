@@ -1,5 +1,13 @@
 CXX = g++
-CXXFLAGS = -Wno-nan-infinity-disabled -O3 -march=native -ffast-math -std=c++17
+# CXXFLAGS = -g -O0 -std=c++17
+CXXFLAGS = -O3 -march=native -std=c++17
+# CXXFLAGS = -Wall -Wextra -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal \
+# 	    -Wformat=2 -Winit-self -Wmissing-declarations \
+# 	    -Wmissing-include-dirs -Wpointer-arith -Wredundant-decls \
+# 	    -Wswitch-default -Wuninitialized -Wwrite-strings \
+# 	    -Wno-sign-conversion -Wno-unused-function \
+#         -Wno-missing-declarations \
+#         -std=c++14 -mcx16 -O3 -DNDEBUG
 LDFLAGS = -lboost_system -lboost_filesystem -lboost_iostreams -ligraph
 
 UNAME = $(shell uname)
@@ -10,7 +18,7 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 endif
 
-TARGET = abmc louvain
+TARGET = abmc louvain gmc rabmc
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -20,10 +28,17 @@ LSRCS := louvain.cpp
 LOBJS := $(LSRCS:.cpp=.o)
 LHDRS := $(LSRCS:.cpp=.hpp)
 
+GSRCS := gmc.cpp
+GOBJS := $(GSRCS:.cpp=.o)
+GHDRS := $(GSRCS:.cpp=.hpp)
+
+RSRCS := rabmc.cpp
+ROBJS := $(RSRCS:.cpp=.o)
+RHDRS := $(RSRCS:.cpp=.hpp)
+
 CSRCS := common/mm_io.cpp common/Coloring.cpp common/BlockIO.cpp
 COBJS := $(CSRCS:.cpp=.o)
 CHDRS := $(CSRCS:.cpp=.hpp)
-
 
 all: $(TARGET)
 
@@ -33,8 +48,16 @@ abmc: $(AOBJS) $(COBJS)
 louvain: $(LOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-# %.o: %.cpp $(HDRS)
-# 	$(CXX) $(CXXFLAGS) -c $<
+gmc: $(GOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+rabmc: $(ROBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -fopenmp -o $@ $^ $(LDFLAGS) -ltcmalloc_minimal -lnuma
+
+%.o: %.cpp $(HDRS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+rabmc.o: CXXFLAGS += -fopenmp
 
 common/%.o: common/%.cpp $(CHDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -44,4 +67,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(OBJS) $(COBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(GOBJS) $(ROBJS) $(COBJS)

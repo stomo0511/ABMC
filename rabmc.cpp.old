@@ -1,0 +1,439 @@
+#include <queue>
+#include <algorithm>
+#include <numeric>
+#include "common/Types.hpp"
+#include "common/mm_io.hpp"
+#include "common/Coloring.hpp"
+#include "common/BlockIO.hpp"
+#include "common/Block_Eval.hpp"
+#include "abmc.hpp"
+#include "rabbit_order.hpp"
+
+// Rabbit Order が要求する標準的な CSR 構造体
+struct RabbitGraph {
+    int n;                             // 頂点数
+    long m;                            // エッジ数（有向グラフ換算の総数）
+    std::vector<long> offsets;         // 頂点 i の隣接エッジ開始インデックス
+    std::vector<int> neighbors;        // 隣接頂点 ID
+    std::vector<double> edge_weights;  // エッジの重み (w_uv)
+};
+
+// BGL の Graph (undirected) から Rabbit Order 用の CSR 形式に変換する
+RabbitGraph ConvertToRabbitFormat(const Graph& G) {
+    const int n = (int)boost::num_vertices(G);
+    auto weightmap = boost::get(boost::edge_weight, G);
+    
+    RabbitGraph rg;
+    rg.n = n;
+    rg.offsets.assign(n + 1, 0);
+
+    // 1. 各頂点の次数をカウントして offsets を構築
+    long edge_count = 0;
+    for (int i = 0; i < n; ++i) {
+        // 無向グラフの場合、out_degree が隣接頂点数になる
+        rg.offsets[i] = edge_count;
+        edge_count += boost::out_degree(i, G);
+    }
+    rg.offsets[n] = edge_count;
+    rg.m = edge_count;
+
+    // 2. neighbors と weights を埋める
+    rg.neighbors.resize(edge_count);
+    rg.edge_weights.resize(edge_count);
+
+    for (int u = 0; u < n; ++u) {
+        long current_idx = rg.offsets[u];
+        
+        // u に隣接する全エッジを走査
+        boost::graph_traits<Graph>::out_edge_iterator ei, ei_end;
+        for (boost::tie(ei, ei_end) = boost::out_edges(u, G); ei != ei_end; ++ei) {
+            int v = (int)boost::target(*ei, G);
+            rg.neighbors[current_idx] = v;
+            rg.edge_weights[current_idx] = weightmap[*ei];
+            current_idx++;
+        }
+    }
+
+    return rg;
+}
+
+/**
+ * Rabbit Order を実行し、デンドログラム構造（graphオブジェクト）を構築する
+ */
+rabbit_order::aux::graph ExecuteRabbitPhase(std::vector<std::vector<rabbit_order::edge>>& adj) {
+    // 1. 並列階層構築 (Parallel Incremental Aggregation) の実行
+    // rabbit_order::aggregate は入力された隣接リストから内部構造を構築し、
+    // デンドログラム（親子関係）を含む graph オブジェクトを返します。
+    
+    std::cout << "Starting Rabbit Order community detection..." << std::endl;
+    
+    // 内部で OpenMP を使用し、アトミック操作 (CAS) で高速に階層を作ります。
+    rabbit_order::aux::graph g = rabbit_order::aggregate(std::move(adj));
+
+    std::cout << "Dendrogram construction completed. Top-level communities: " 
+              << (g.tops ? g.tops->size() : 0) << std::endl;
+
+    return g;
+}
+
+/**
+ * BGL の Graph から Rabbit Order の入力形式 (std::vector<std::vector<edge>>) に変換
+ */
+std::vector<std::vector<rabbit_order::edge>> ConvertToRabbitAdj(const Graph& G) {
+    const int n = (int)boost::num_vertices(G);
+    auto weightmap = boost::get(boost::edge_weight, G);
+    
+    std::vector<std::vector<rabbit_order::edge>> adj(n);
+
+    for (int u = 0; u < n; ++u) {
+        boost::graph_traits<Graph>::out_edge_iterator ei, ei_end;
+        for (boost::tie(ei, ei_end) = boost::out_edges(u, G); ei != ei_end; ++ei) {
+            int v = (int)boost::target(*ei, G);
+            float weight = static_cast<float>(weightmap[*ei]);
+            adj[u].push_back({static_cast<rabbit_order::vint>(v), weight});
+        }
+    }
+    return adj;
+}
+
+/**
+ * 各ノードが絶縁ノード（Insular node）かどうかを判定する
+ */
+std::vector<bool> IdentifyInsularNodes(const rabbit_order::aux::graph& rg) {
+    const int n = rg.n();
+    std::vector<bool> is_insular(n, true);
+
+    #pragma omp parallel for
+    for (int u = 0; u < n; ++u) {
+        int u_com = rg.coms[u]; // ノードuの所属コミュニティID
+        
+        for (const auto& edge : rg.es[u]) {
+            int v = edge.first;
+            // 隣接ノードvが異なるコミュニティに属していれば、uは非絶縁
+            if (rg.coms[v] != u_com) {
+                is_insular[u] = false;
+                break;
+            }
+        }
+    }
+    return is_insular;
+}
+
+/**
+ * デンドログラムを再帰的に走査し、各ノードのサブツリーサイズを計算する
+ */
+int CalculateSubtreeSizes(int v, const rabbit_order::aux::graph& rg, std::vector<int>& sizes) {
+    if (v == rabbit_order::aux::vmax) return 0;
+
+    int size = 1; // 自分自身
+    // 子ノード（child）とその兄弟（sibling）を走査
+    int child = rg.vs[v].a->child;
+    while (child != rabbit_order::aux::vmax) {
+        size += CalculateSubtreeSizes(child, rg, sizes);
+        child = rg.vs[child].sibling;
+    }
+    return sizes[v] = size;
+}
+
+/**
+ * Rabbit Order の階層構造から ABMC ブロックを生成する
+ */
+void PartitionDendrogram(
+    int v, int& current_block_id, int block_size, 
+    const rabbit_order::aux::graph& rg, const std::vector<int>& sizes, 
+    std::vector<int>& block_of, std::vector<int>& current_block_nodes
+) {
+    if (v == rabbit_order::aux::vmax) return;
+
+    // もしこのサブツリーが目標サイズ s 以下なら、一つのブロックとして確定
+    if (sizes[v] <= block_size) {
+        AssignSubtreeToBlock(v, current_block_id++, rg, block_of);
+        return;
+    }
+
+    // サイズが s より大きい場合は、さらに深く探索
+    int child = rg.vs[v].a->child;
+    if (child == rabbit_order::aux::vmax) {
+        // 子がいない（葉ノード）がサイズ制約でここに来る場合は単独ブロック
+        block_of[v] = current_block_id++;
+    } else {
+        while (child != rabbit_order::aux::vmax) {
+            PartitionDendrogram(child, current_block_id, block_size, rg, sizes, block_of, current_block_nodes);
+            child = rg.vs[child].sibling;
+        }
+    }
+}
+
+// --- ヘルパー関数: 指定したサブツリーの全ノードを特定のブロックに割り当てる ---
+void AssignSubtreeToBlock(int v, int block_id, const graph& rg, std::vector<int>& block_of) {
+    if (v == vmax || block_of[v] != -1) return;
+
+    block_of[v] = block_id;
+
+    // 子ノードを再帰的に処理
+    vint child = rg.vs[v].a->child;
+    while (child != vmax) {
+        AssignSubtreeToBlock(child, block_id, rg, block_of);
+        child = rg.vs[child].sibling;
+    }
+}
+
+// --- ステップ 4: Rabbit Order の階層構造から ABMC ブロックを生成する ---
+void PartitionDendrogram(
+    int v, int& current_block_id, int block_size, 
+    const graph& rg, const std::vector<int>& sizes, 
+    std::vector<int>& block_of
+) {
+    if (v == vmax) return;
+
+    // もしこのサブツリーが目標サイズ s 以下なら、一つのブロックとして確定
+    if (sizes[v] <= block_size) {
+        AssignSubtreeToBlock(v, current_block_id++, rg, block_of);
+        return;
+    }
+
+    // サイズが s より大きい場合は、さらに深く探索
+    vint child = rg.vs[v].a->child;
+    if (child == vmax) {
+        // 葉ノード（原子ノード）だが何らかの理由で単独で block_size を超えることはないはずだが、
+        // 安全のためにここで割り当てる
+        if (block_of[v] == -1) block_of[v] = current_block_id++;
+    } else {
+        // 子ノードを走査
+        while (child != vmax) {
+            PartitionDendrogram(child, current_block_id, block_size, rg, sizes, block_of);
+            child = rg.vs[child].sibling;
+        }
+        // 子の処理が終わった後、親(v)自身が未割当なら現在のブロックに入れる（余り物処理）
+        if (block_of[v] == -1) block_of[v] = current_block_id++;
+    }
+}
+
+// ブロック化（ポリシー選択あり）
+BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
+{
+    const int N = (int)boost::num_vertices(G);
+    if (N == 0) return {};
+    if (block_size < 1) block_size = 1;
+
+    BlockPartition out;
+    out.n = N;
+    out.s = block_size;
+    out.block_of.assign(N, -1);
+
+    // WeightMap wmap = get(boost::edge_weight, G);
+    auto wmap = get(boost::edge_weight, G);
+
+    int assigned = 0;
+    while (assigned < N) {
+        const int seed0 = pick_next_seed(out.block_of); // 最小番号の未割当ノード（論文のseed）:contentReference[oaicite:2]{index=2}
+        if (seed0 < 0) break;
+
+        // このブロックの目標サイズ（末尾ブロックは小さくてもOK）:contentReference[oaicite:3]{index=3}
+        const int target = std::min(block_size, N - assigned);
+
+        const int k = (int)out.blocks.size();
+        out.blocks.emplace_back();
+        std::vector<char> in_block(N, 0);
+        std::vector<char> in_cand(N, 0);
+        std::vector<int>  cand;  // 候補集合 C（重複なし）:contentReference[oaicite:4]{index=4}
+
+        auto add_to_block = [&](int v){
+            out.block_of[v] = k;
+            out.blocks.back().push_back(v);
+            in_block[v] = 1;
+            ++assigned;
+
+            // C ← C ∪ adj(v) （未割当のみ追加）:contentReference[oaicite:5]{index=5}
+            auto nbrs = boost::adjacent_vertices(v, G);
+            for (AdjacencyIter it = nbrs.first; it != nbrs.second; ++it) {
+                int u = (int)*it;
+                if (out.block_of[u] == -1 && !in_cand[u]) {
+                    in_cand[u] = 1;
+                    cand.push_back(u);
+                }
+            }
+        };
+
+        // Step 2: Cが空ならseed、そうでなければCからpolicyに従って選ぶ:contentReference[oaicite:6]{index=6}
+        add_to_block(seed0);
+
+        while ((int)out.blocks.back().size() < target) {
+            int chosen = -1;
+
+            if (cand.empty()) {
+                // 近傍が尽きたら未割当から新しいseedで継続（G'からの取り出しに相当）:contentReference[oaicite:7]{index=7}
+                int seed = pick_next_seed(out.block_of);
+                if (seed < 0) break;
+                chosen = seed;
+            } else if (policy == BlockPolicy::FIFO) {
+                // Policy 1: FIFO:contentReference[oaicite:8]{index=8}
+                // candは集合だが、FIFOっぽく先頭を使う
+                // 既に割当済みのものはスキップ
+                while (!cand.empty() && out.block_of[cand.front()] != -1) {
+                    in_cand[cand.front()] = 0;
+                    cand.erase(cand.begin());
+                }
+                if (!cand.empty()) {
+                    chosen = cand.front();
+                    in_cand[chosen] = 0;
+                    cand.erase(cand.begin());
+                }
+            } else {
+                // Policy 2/3 はスコア最大の候補を取る
+                // 近傍数または重み合計を高速に得るため、adj(v)をナメつつ in_block[] を参照
+                double best = -1.0;
+                int best_idx = -1;
+
+                for (int idx = 0; idx < (int)cand.size(); ++idx) {
+                    int v = cand[idx];
+                    if (out.block_of[v] != -1) continue;
+
+                    double score = 0.0;
+                    auto nbrs = boost::adjacent_vertices(v, G);
+                    for (AdjacencyIter it = nbrs.first; it != nbrs.second; ++it) {
+                        int u = (int)*it;
+                        if (!in_block[u]) continue;
+
+                        if (policy == BlockPolicy::MaxEdges) {
+                            // 本数を数える（整数だがdoubleに載せる）:contentReference[oaicite:9]{index=9}
+                            score += 1.0;
+                        } else {
+                            // Weighted: Σ_{u∈Vk} |a_{vu}| を近似（無向1本をそのまま利用）:contentReference[oaicite:10]{index=10}
+                            auto ep = boost::edge(v, u, G);
+                            if (ep.second) {
+                                double w = std::abs(get(wmap, ep.first));
+                                score += w;
+                            } else {
+                                // (グラフが無向であれば通常到達する)
+                            }
+                        }
+                    }
+                    if (score > best || (score == best && v < best_idx)) {
+                        best = score;
+                        best_idx = v;
+                    }
+                }
+
+                if (best_idx != -1) {
+                    chosen = best_idx;
+                    // cand から削除
+                    auto it = std::find(cand.begin(), cand.end(), chosen);
+                    if (it != cand.end()) cand.erase(it);
+                    in_cand[chosen] = 0;
+                } else {
+                    // すべて割当済み/スコア不可→seed fallback
+                    int seed = pick_next_seed(out.block_of);
+                    if (seed < 0) break;
+                    chosen = seed;
+                }
+            }
+
+            if (chosen == -1) break;
+            add_to_block(chosen);
+        }
+    }
+
+    out.nb = (int)out.blocks.size();
+    return out;
+}
+
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        std::fprintf(stderr, "usage: %s <matrix.mtx> <# blocks> [policy(1|2|3)]\n", argv[0]);
+        return 1;
+    }
+
+    Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
+    int N  = num_vertices(G);         // ノード数
+    int E = num_edges(G);             // エッジ数
+    int B = std::atoi(argv[2]);       // ブロック数
+    int bs = N % B == 0 ? N / B : N / B + 1;  // ブロックサイズ
+
+    int p_in = (argc >= 4) ? std::atoi(argv[3]) : 1;  // ブロック化ポリシー
+    if (p_in < 1 || p_in > 3) p_in = 1;
+
+    std::cout << "N = " << N << ", E = " << E << ", B = " << B << ", block_size = " << bs
+              << ", policy = " << p_in << std::endl;
+
+    // グラフ G を Rabbit Order が要求する形式に変換
+    RabbitGraph rg = ConvertToRabbitFormat(G);
+
+    //////////////////////////////////////////////////////////////////
+    // // ブロック化ポリシー設定
+    // BlockPolicy policy = static_cast<BlockPolicy>(p_in);
+
+    // // ブロック化
+    // BlockPartition part = ABMC_Blocking(G, bs, policy);
+
+    // //////////////////////////////////////////////
+    // // デバッグ用出力
+    // std::printf("ABMC blocking with %s\n", policy_name(policy));
+    // std::printf("#blocks=%d, block size=%d\n", B, part.s);
+    // // DumpBlocks(part);
+
+    // //////////////////////////////////////////////
+    // // ブロックグラフの作成
+    // Graph T = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
+
+    // //////////////////////////////////////////////
+    // // ブロック内結合度の評価
+    // auto internal = CountInternalEdges(G, part.block_of, part.nb);
+    // double total_avg = 0.0;
+    // for (int b = 0; b < part.nb; ++b) {
+    //     int n = (int)part.blocks[b].size();
+    //     double avg_deg = (n > 0) ? 2.0 * internal[b] / n : 0.0;
+    //     total_avg += avg_deg;
+    //     // std::cout << "Block " << b << ": nodes=" << n
+    //     //           << ", internal_edges=" << internal[b]
+    //     //           << ", avg_deg=" << avg_deg << "\n";
+    // }
+    // std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+
+    // //////////////////////////////////////////////
+    // // ブロック間結合度の評価
+    // // ブロック間の複数エッジを1本にカウントする場合
+    // Graph T_bin = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
+    // // 各ブロックの次数を計算
+    // total_avg = 0.0;
+    // for (int b = 0; b < part.nb; ++b) {
+    //     int deg = boost::degree(b, T_bin);
+    //     // std::cout << "Block " << b << ": degree=" << deg << "\n";
+    //     total_avg += deg;
+    // }
+    // std::cout << "Block graph average degree: "
+    //           << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+
+    // //////////////////////////////////////////////
+    // // ブロックグラフの彩色
+    // std::vector<int> block_color;
+    // int nc = Greedy_Coloring(T, block_color);
+
+    // // 色ラベルを頻度順に付け替え
+    // RelabelColorsByClassSize(block_color);
+
+    // //////////////////////////////////////////////
+    // // デバッグ用出力
+    // // DumpBlockEdges(T);
+    // // DumpBlockAdjacency(T);
+
+    // // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
+    // std::string stem = file_stem(argv[1]);
+    // stem += "_abmc";
+    // stem += "_B" + std::to_string(B);  // # blocks
+    // stem += "_p" + std::to_string(p_in);    // policy
+    // std::string blk_path  = stem + ".blk";
+    // std::string bcol_path = stem + ".bcol";
+
+    // // ブロック情報データの出力
+    // WriteBlockInfo_1Based(part.block_of, blk_path);
+
+    // // ブロック色情報データの出力
+    // WriteBlockColor_1Based(block_color, nc, bcol_path);
+
+    // // --- モジュラリティ（未加重）
+    // double Q = Modularity_Unweighted(G, part.block_of);
+    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
+
+    return 0;
+}
