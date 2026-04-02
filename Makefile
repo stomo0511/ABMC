@@ -1,6 +1,6 @@
 CXX = g++
 # CXXFLAGS = -g -O0 -std=c++17
-CXXFLAGS = -O3 -march=native -std=c++17
+CXXFLAGS = -O3 -ffast-math -march=native -std=c++17
 # CXXFLAGS = -Wall -Wextra -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal \
 # 	    -Wformat=2 -Winit-self -Wmissing-declarations \
 # 	    -Wmissing-include-dirs -Wpointer-arith -Wredundant-decls \

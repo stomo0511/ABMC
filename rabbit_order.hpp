@@ -265,20 +265,12 @@ typedef std::pair<vint, float> edge;
 // Part of the vertex attributes that is to be atomically modified
 //
 struct atom {
-  // atomix<float> str;    // Total weighted degree of the community members
-  // atomix<vint>  child;  // Last vertex that is merged to this vertex
+  atomix<float> str;    // Total weighted degree of the community members
+  atomix<vint>  child;  // Last vertex that is merged to this vertex
 
-  float str;
-  vint child;
-
-  // 明示的にデフォルトを指定
-  atom() = default;
-
-
-  // atom()                : str(0.0), child(vmax) {}
-  // atom(float s)         : str(s),   child(vmax) {}
+  atom()                : str(0.0), child(vmax) {}
+  atom(float s)         : str(s),   child(vmax) {}
   atom(float s, vint c) : str(s),   child(c)    {}
-
 } __attribute__((aligned(8)));
 
 //
@@ -289,8 +281,7 @@ struct vertex {
   atomix<vint> sibling;
   vint         united_child;
 
-  // vertex(float str) : a(atom(str)), sibling(vmax), united_child(vmax) {}
-  vertex(float str) : a(atom(str, vmax)), sibling(vmax), united_child(vmax) {}
+  vertex(float str) : a(atom(str)), sibling(vmax), united_child(vmax) {}
 };
 
 //
@@ -464,7 +455,7 @@ void unite(const vint v, std::vector<edge>* const nbrs, graph* const g) {
 vint find_best(const graph& g, const vint v, const double vstr) {
   double dmax = 0.0;
   vint   best = v;
-  for (const edge& e : g.es[v]) {
+  for (const edge e : g.es[v]) {
     const double d =
         static_cast<double>(e.second) - vstr * g.vs[e.first].a->str / g.tot_wgt;
     if (dmax < d) {
@@ -489,13 +480,7 @@ vint merge(const vint v, std::vector<edge>* const nbrs, graph* const g) {
   unite(v, nbrs, g);
 
   // `.str < 0.0` means that modification of `g[v]` is prohibited (locked)
-  // const float vstr = g->vs[v].a->str.exchange(-1);
-  // 現在の atom (str と child のペア) を取得しつつ、str を -1 にしてロックする
-atom expected = g->vs[v].a; // atomic load
-atom locked_atom(-1.0f, expected.child); 
-atom old_atom = g->vs[v].a.exchange(locked_atom); // atom ごと exchange
-
-const float vstr = old_atom.str; // 交換前の str を取得
+  const float vstr = g->vs[v].a->str.exchange(-1);
 
   // If `.child` was modified between the previous call of `unite()` and the
   // lock, aggregate edges again
