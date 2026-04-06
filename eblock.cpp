@@ -11,6 +11,164 @@
 // #include "abmc.hpp"
 
 /**
+ * ChatGPTの指摘による評価指標の追加
+ */
+void EvaluateEdgeLocality(
+    const Graph& G,
+    const std::vector<int>& block_of,
+    int nb)
+{
+    int internal = 0;
+    int external = 0;
+
+    int N = boost::num_vertices(G);
+
+    for(int u=0;u<N;++u){
+
+        boost::graph_traits<Graph>::out_edge_iterator ei,ei_end;
+
+        for(boost::tie(ei,ei_end)=boost::out_edges(u,G);
+            ei!=ei_end;++ei){
+
+            int v = boost::target(*ei,G);
+
+            if(u<v){
+
+                if(block_of[u]==block_of[v])
+                    internal++;
+                else
+                    external++;
+            }
+        }
+    }
+
+    double ratio =
+        (double)internal /
+        (internal + external);
+
+    std::cout<<"Internal edges : "<<internal<<"\n";
+    std::cout<<"External edges : "<<external<<"\n";
+    std::cout<<"Internal ratio : "<<ratio<<"\n";
+}
+
+void EvaluateBlockDensity(
+    const Graph& G,
+    const std::vector<int>& block_of,
+    int nb)
+{
+    auto nodes_per_block =
+        CountNodesPerBlock(block_of,nb);
+
+    auto internal_edges =
+        CountInternalEdges(G,block_of,nb);
+
+    double avg_density=0;
+
+    for(int b=0;b<nb;++b){
+
+        int n = nodes_per_block[b];
+
+        if(n<=1)
+            continue;
+
+        double max_edges =
+            n*(n-1)/2.0;
+
+        double density =
+            internal_edges[b] /
+            max_edges;
+
+        avg_density+=density;
+    }
+
+    avg_density/=nb;
+
+    std::cout
+        <<"Avg block density : "
+        <<avg_density<<"\n";
+}
+
+void EvaluateBlockGraph(const Graph& T)
+{
+    int nb = boost::num_vertices(T);
+
+    int edges = boost::num_edges(T);
+
+    double density = edges / (nb*(nb-1)/2.0);
+
+    std::cout
+        <<"Block graph edges : "
+        <<edges<<"\n";
+
+    std::cout
+        <<"Block graph density : "
+        <<density<<"\n";
+}
+
+void EvaluateLocalityScore(
+    const Graph& G,
+    const std::vector<int>& block_of)
+{
+    int internal=0;
+    int external=0;
+
+    int N =
+        boost::num_vertices(G);
+
+    for(int u=0;u<N;++u){
+
+        boost::graph_traits
+        <Graph>::out_edge_iterator ei,ei_end;
+
+        for(boost::tie(ei,ei_end)=
+            boost::out_edges(u,G);
+
+            ei!=ei_end;++ei){
+
+            int v =
+                boost::target(*ei,G);
+
+            if(block_of[u]==block_of[v])
+                internal++;
+            else
+                external++;
+        }
+    }
+
+    double score =
+        internal /
+        (double)(external+1);
+
+    std::cout
+        <<"Locality score : "
+        <<score<<"\n";
+}
+
+void EvaluateLoadBalance(
+    const std::vector<int>& nodes_per_block)
+{
+    double mean=0;
+
+    for(int n:nodes_per_block)
+        mean+=n;
+
+    mean/=nodes_per_block.size();
+
+    double var=0;
+
+    for(int n:nodes_per_block)
+        var+=(n-mean)*(n-mean);
+
+    var/=nodes_per_block.size();
+
+    double stddev=sqrt(var);
+
+    std::cout
+        <<"Block size stddev : "
+        <<stddev<<"\n";
+}
+
+/**
  * ブロックの品質を多角的に評価する
  */
 void EvaluatePartitioning(const Graph& G, const std::vector<int>& block_of, int nb, int nc) {
@@ -68,6 +226,13 @@ void EvaluatePartitioning(const Graph& G, const std::vector<int>& block_of, int 
     
     std::cout << "5. Modularity (Q)        : " << std::setprecision(6) << Q << std::endl;
     std::cout << "==============================================" << std::endl;
+
+    // 評価の実行
+    EvaluateEdgeLocality(G,block_of,nb);
+    EvaluateBlockDensity(G,block_of,nb);
+    EvaluateBlockGraph(T);
+    EvaluateLocalityScore(G,block_of);
+    EvaluateLoadBalance(nodes_per_block);
 }
 
 int main(int argc, char** argv) {

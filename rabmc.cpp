@@ -197,21 +197,89 @@ private:
         }
     }
 
+    /////////////////////////////////////////////////////
+    // ChatGPTで指摘された要修正箇所
     // バッファに溜まったノードをブロックサイズ s 単位でブロック化
+    // void flush_residual_nodes(int& current_block_id, bool force) {
+    //     while (residual_nodes_.size() >= (size_t)block_size_ || (force && !residual_nodes_.empty())) {
+    //         int count = 0;
+    //         while (!residual_nodes_.empty() && count < block_size_) {
+    //             int node = residual_nodes_.back();
+    //             residual_nodes_.pop_back();
+    //             if (block_of_[node] == -1) {
+    //                 block_of_[node] = current_block_id;
+    //                 count++;
+    //             }
+    //         }
+    //         if (count > 0) current_block_id++;
+    //         if (force && residual_nodes_.empty()) break;
+    //         if (!force && residual_nodes_.size() < (size_t)block_size_) break;
+    //     }
+    // }
+
+    /////////////////////////////////////////////////////
+    // ChatGPTによる修正案
+    int connection_score(int node, int block_id) {
+
+        int score = 0;
+
+        for (const auto& e : rg_->es[node]) {
+
+            int v = e.first;
+
+            if (v >= N_)
+                continue;
+
+            if (block_of_[v] == block_id)
+                score++;
+        }
+
+        return score;
+    }
+
     void flush_residual_nodes(int& current_block_id, bool force) {
-        while (residual_nodes_.size() >= (size_t)block_size_ || (force && !residual_nodes_.empty())) {
+
+        while (residual_nodes_.size() >= (size_t)block_size_ ||
+            (force && !residual_nodes_.empty())) {
+
             int count = 0;
+
             while (!residual_nodes_.empty() && count < block_size_) {
-                int node = residual_nodes_.back();
-                residual_nodes_.pop_back();
+
+                int best_index = -1;
+                int best_score = -1;
+
+                for (int i = 0; i < (int)residual_nodes_.size(); ++i) {
+
+                    int node = residual_nodes_[i];
+
+                    int score = connection_score(node, current_block_id);
+
+                    if (score > best_score) {
+                        best_score = score;
+                        best_index = i;
+                    }
+                }
+
+                int node = residual_nodes_[best_index];
+
+                residual_nodes_.erase(residual_nodes_.begin() + best_index);
+
                 if (block_of_[node] == -1) {
                     block_of_[node] = current_block_id;
                     count++;
                 }
             }
-            if (count > 0) current_block_id++;
-            if (force && residual_nodes_.empty()) break;
-            if (!force && residual_nodes_.size() < (size_t)block_size_) break;
+
+            if (count > 0)
+                current_block_id++;
+
+            if (force && residual_nodes_.empty())
+                break;
+
+            if (!force &&
+                residual_nodes_.size() < (size_t)block_size_)
+                break;
         }
     }
 
