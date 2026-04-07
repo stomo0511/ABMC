@@ -308,16 +308,20 @@ int main(int argc, char** argv) {
     // 1. データの読み込み
     Graph G = Read_MM_UD(argv[1]);
     int nb = std::atoi(argv[2]);
+    std::cout << "Graph loaded: " << boost::num_vertices(G) << " nodes, " 
+              << boost::num_edges(G) << " edges.\n";
 
     // 2. Rabbit-ABMC ハイブリッド順序付けの実行
     RabbitABMC solver(G, nb);
     BlockPartition part = solver.run();
+    std::cout << "Partitioning completed: " << part.nb << " blocks created.\n";
 
     // 3. ブロックグラフの構築と彩色
     Graph T = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
     std::vector<int> block_color;
     int nc = Greedy_Coloring(T, block_color);
     RelabelColorsByClassSize(block_color);
+    std::cout << "Block graph colored: " << nc << " colors used.\n";
 
     // 4. 結果の出力 (ブロック数をファイル名に付与)
     std::string stem = file_stem(argv[1]);
