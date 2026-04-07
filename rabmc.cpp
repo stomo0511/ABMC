@@ -60,35 +60,41 @@ public:
         // Step 2: Rabbit Order (Parallel Incremental Aggregation) の実行
         rg_ = std::make_unique<graph>(aggregate(std::move(adj)));
 
-        // Step 3: 絶縁ノードの同定とサブツリーサイズの計算
-        is_insular_ = identify_insular_nodes();
-        subtree_sizes_.assign(N_, 0);
-        if (rg_->tops) {
-            for (vint top : *rg_->tops) {
-                calculate_subtree_sizes(top);
-            }
-        }
-
-        // Step 4: デンドログラムの再帰的切り出し
-        int current_block_id = 0;
-        if (rg_->tops) {
-            for (vint top : *rg_->tops) {
-                partition_dendrogram(top, current_block_id);
-            }
-        }
-
         // 結果のパッケージング
         BlockPartition part;
         part.n = N_;
-        part.s = block_size_;
-        part.nb = current_block_id;
-        part.block_of = block_of_;
-        part.blocks.resize(part.nb);
-        for (int i = 0; i < N_; ++i) {
-            if (part.block_of[i] != -1) {
-                part.blocks[part.block_of[i]].push_back(i);
-            }
+        part.block_of.resize(N_);
+
+        std::vector<int> rabbit_coms(N_);
+
+        for(int i=0;i<N_;++i){
+            rabbit_coms[i] = rg_->coms[i];
+            part.block_of[i] = rabbit_coms[i];
         }
+
+        // community数計算
+        std::set<int> unique_coms(
+            rabbit_coms.begin(),
+            rabbit_coms.end());
+
+        part.nb = unique_coms.size();
+        part.s = -1;
+        part.blocks.resize(part.nb);
+
+        // relabel（重要）
+        std::map<int,int> relabel;
+
+        int id=0;
+
+        for(int c:unique_coms)
+            relabel[c]=id++;
+
+        for(int i=0;i<N_;++i) {
+            int b = relabel[rabbit_coms[i]];
+            part.block_of[i]=b;
+            part.blocks[b].push_back(i);
+        }
+
         return part;
     }
 
@@ -184,12 +190,39 @@ int main(int argc, char** argv) {
     Graph G = Read_MM_UD(argv[1]);
     int nb = std::atoi(argv[2]);
 
-    // 2. ハイブリッド順序付けの実行
+    // 2. ハイブリッド順序付けの実行（現状はRabbit ordering）
     RabbitABMC solver(G, nb);
     BlockPartition part = solver.run();
 
+    std::cout << "#blocks=" << part.nb << "\n";
+
     // 3. ブロックグラフの構築と彩色
     Graph T = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
+
+    //////////////////////////////////////////////
+    // ブロック内結合度の評価
+    auto internal = CountInternalEdges(G, part.block_of, part.nb);
+    double total_avg = 0.0;
+    for (int b = 0; b < part.nb; ++b) {
+        int n = (int)part.blocks[b].size();
+        double avg_deg = (n > 0) ? 2.0 * internal[b] / n : 0.0;
+        total_avg += avg_deg;
+        // std::cout << "Block " << b << ": nodes=" << n
+        //           << ", internal_edges=" << internal[b]
+        //           << ", avg_deg=" << avg_deg << "\n";
+    }
+    std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+
+    total_avg = 0.0;
+    for (int b = 0; b < part.nb; ++b) {
+        int deg = boost::degree(b, T);
+        total_avg += deg;
+    }
+    std::cout << "Block graph average degree: "
+              << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+
+    //////////////////////////////////////////////
+    // ブロックグラフの彩色
     std::vector<int> block_color;
     int nc = Greedy_Coloring(T, block_color);
     RelabelColorsByClassSize(block_color);
@@ -203,8 +236,11 @@ int main(int argc, char** argv) {
     WriteBlockColor_1Based(block_color, nc, bcol_path);
 
     // 5. 評価値の表示
+    // --- モジュラリティ（未加重）
     double Q = Modularity_Unweighted(G, part.block_of);
-    std::printf("Rabbit-ABMC Execution Completed.\n#Blocks: %d, #Colors: %d, Modularity: %.6f\n", part.nb, nc, Q);
+    std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    Q = Modularity_Weighted(G, part.block_of);
+    std::printf("Modularity (weighted)   = %.6f\n", Q);
 
     return 0;
 }

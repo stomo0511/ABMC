@@ -165,6 +165,7 @@ int main(int argc, char** argv) {
 
     //////////////////////////////////////////////
     // ブロックグラフの作成
+    // ブロック間の複数エッジを1本にカウント
     Graph T = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
 
     //////////////////////////////////////////////
@@ -175,32 +176,12 @@ int main(int argc, char** argv) {
         int n = (int)part.blocks[b].size();
         double avg_deg = (n > 0) ? 2.0 * internal[b] / n : 0.0;
         total_avg += avg_deg;
-        // std::cout << "Block " << b << ": nodes=" << n
-        //           << ", internal_edges=" << internal[b]
-        //           << ", avg_deg=" << avg_deg << "\n";
     }
     std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
-    //////////////////////////////////////////////
-    // ブロック間結合度の評価
-    // ブロック間の複数エッジのエッジをカウントする場合
-    // Graph T_count = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Count);
-    // auto Tw = get(boost::edge_weight, T_count);
-    // for (auto eIt = edges(T_count); eIt.first != eIt.second; ++eIt.first) {
-    //     auto e = *eIt.first;
-    //     int bu = (int)source(e, T_count);
-    //     int bv = (int)target(e, T_count);
-    //     double w = Tw[e];
-    //     std::cout << "Block " << bu << " - Block " << bv
-    //               << ": inter_edges=" << w << "\n";
-    // }
-    // ブロック間の複数エッジを1本にカウントする場合
-    Graph T_bin = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
-    // 各ブロックの次数を計算
     total_avg = 0.0;
     for (int b = 0; b < part.nb; ++b) {
-        int deg = boost::degree(b, T_bin);
-        // std::cout << "Block " << b << ": degree=" << deg << "\n";
+        int deg = boost::degree(b, T);
         total_avg += deg;
     }
     std::cout << "Block graph average degree: "
@@ -236,5 +217,8 @@ int main(int argc, char** argv) {
     // --- モジュラリティ（未加重）
     double Q = Modularity_Unweighted(G, part.block_of);
     std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    Q = Modularity_Weighted(G, part.block_of);
+    std::printf("Modularity (weighted)   = %.6f\n", Q);
+
     return 0;
 }
