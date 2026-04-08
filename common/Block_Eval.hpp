@@ -42,8 +42,7 @@ inline std::vector<int> BlockDegreesBinary(const Graph& T)
 }
 
 // モジュラリティ (未加重)
-inline double
-Modularity_Unweighted(const Graph& G, const std::vector<int>& block_of)
+inline double Modularity_Unweighted(const Graph& G, const std::vector<int>& block_of)
 {
     // 1. ブロック数の確定
     const int nb = 1 + *std::max_element(block_of.begin(), block_of.end());
@@ -83,11 +82,7 @@ Modularity_Unweighted(const Graph& G, const std::vector<int>& block_of)
 }
 
 // モジュラリティ (加重)
-inline double
-Modularity_Weighted(
- const Graph& G,
- const std::vector<int>& block_of)
-{
+inline double Modularity_Weighted(const Graph& G, const std::vector<int>& block_of) {
     const int nb = 1+*std::max_element(block_of.begin(),block_of.end());
 
     std::vector<double> Kb(nb,0.0);
