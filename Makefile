@@ -18,7 +18,7 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 endif
 
-TARGET = abmc louvain gmc rabmc
+TARGET = abmc louvain gmc rabmc rabbit
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -35,6 +35,10 @@ GHDRS := $(GSRCS:.cpp=.hpp)
 RSRCS := rabmc.cpp
 ROBJS := $(RSRCS:.cpp=.o)
 RHDRS := $(RSRCS:.cpp=.hpp)
+
+BSRCS := rabbit.cpp
+BOBJS := $(BSRCS:.cpp=.o)
+BHDRS := $(BSRCS:.cpp=.hpp)
 
 CSRCS := common/mm_io.cpp common/Coloring.cpp common/BlockIO.cpp
 COBJS := $(CSRCS:.cpp=.o)
@@ -54,10 +58,14 @@ gmc: $(GOBJS) $(COBJS)
 rabmc: $(ROBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -fopenmp -o $@ $^ $(LDFLAGS) -ltcmalloc_minimal -lnuma
 
+rabbit: $(BOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -fopenmp -o $@ $^ $(LDFLAGS) -ltcmalloc_minimal -lnuma
+
 %.o: %.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 rabmc.o: CXXFLAGS += -fopenmp
+rabbit.o: CXXFLAGS += -fopenmp
 
 common/%.o: common/%.cpp $(CHDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -67,4 +75,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(GOBJS) $(ROBJS) $(COBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(COBJS)
