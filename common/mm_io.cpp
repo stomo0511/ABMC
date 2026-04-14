@@ -49,6 +49,70 @@ Graph Read_MM_UD(const std::string& file_name)
     return G;
 }
 
+void WriteReorderedMatrixMarket_UD(
+    const Graph& G,
+    const std::vector<int>& perm,
+    const std::string& file_name)
+{
+    const int n = static_cast<int>(boost::num_vertices(G));
+    auto weightmap = boost::get(boost::edge_weight, G);
+
+    // 無向グラフとして、upper triangle のみ出力
+    struct Entry {
+        int i, j;
+        double a;
+    };
+    std::vector<Entry> entries;
+    entries.reserve(boost::num_edges(G));
+
+    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
+    for (boost::tie(ei, ei_end) = boost::edges(G); ei != ei_end; ++ei) {
+        int u = static_cast<int>(boost::source(*ei, G));
+        int v = static_cast<int>(boost::target(*ei, G));
+        double w = static_cast<double>(weightmap[*ei]);
+
+        int ru = perm[u];
+        int rv = perm[v];
+        if (ru > rv) std::swap(ru, rv);
+
+        // Matrix Market は 1-based
+        entries.push_back({ru + 1, rv + 1, w});
+    }
+
+    std::sort(entries.begin(), entries.end(),
+              [](const Entry& x, const Entry& y) {
+                  if (x.i != y.i) return x.i < y.i;
+                  return x.j < y.j;
+              });
+
+    std::ofstream ofs(file_name);
+    if (!ofs) {
+        throw std::runtime_error("failed to open output file: " + file_name);
+    }
+
+    ofs << "%%MatrixMarket matrix coordinate real symmetric\n";
+    ofs << n << " " << n << " " << entries.size() << "\n";
+    for (const auto& e : entries) {
+        ofs << e.i << " " << e.j << " " << e.a << "\n";
+    }
+}
+
+// 順列をテキストでも保存しておくと後で便利
+// 1行: old_index(1-based) new_index(1-based)
+void WritePermutation_1Based(
+    const std::vector<int>& perm,
+    const std::string& file_name)
+{
+    std::ofstream ofs(file_name);
+    if (!ofs) {
+        throw std::runtime_error("failed to open permutation file: " + file_name);
+    }
+
+    for (int old_id = 0; old_id < static_cast<int>(perm.size()); ++old_id) {
+        ofs << (old_id + 1) << " " << (perm[old_id] + 1) << "\n";
+    }
+}
+
 // ---- ユーティリティ：入力パスから拡張子を外したstemを得る
 std::string file_stem(const std::string& path) {
     // 末尾の '/' or '\' の次からファイル名部分

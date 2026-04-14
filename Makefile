@@ -18,7 +18,7 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 endif
 
-TARGET = abmc louvain gmc rabmc rabbit
+TARGET = abmc louvain gmc rabmc rabbit rcm
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -40,6 +40,10 @@ BSRCS := rabbit.cpp
 BOBJS := $(BSRCS:.cpp=.o)
 BHDRS := $(BSRCS:.cpp=.hpp)
 
+MSRCS := rcm.cpp
+MOBJS := $(MSRCS:.cpp=.o)
+MHDRS := $(MSRCS:.cpp=.hpp)
+
 CSRCS := common/mm_io.cpp common/Coloring.cpp common/BlockIO.cpp
 COBJS := $(CSRCS:.cpp=.o)
 CHDRS := $(CSRCS:.cpp=.hpp)
@@ -60,6 +64,9 @@ rabmc: $(ROBJS) $(COBJS)
 
 rabbit: $(BOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -fopenmp -o $@ $^ $(LDFLAGS) -ltcmalloc_minimal -lnuma
+
+rcm: $(MOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
