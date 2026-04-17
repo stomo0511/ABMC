@@ -11,17 +11,6 @@ extern "C" {
     #include <igraph/igraph.h>
 }
 
-// 0.10判定マクロ（0.9では未定義のことがあるので保険）
-#ifndef IGRAPH_VERSION_MAJOR
-#  define IGRAPH_VERSION_MAJOR 0
-#  define IGRAPH_VERSION_MINOR 9
-#endif
-#if (IGRAPH_VERSION_MAJOR > 0) || (IGRAPH_VERSION_MAJOR==0 && IGRAPH_VERSION_MINOR>=10)
-#  define IGRAPH_AT_LEAST_010 1
-#else
-#  define IGRAPH_AT_LEAST_010 0
-#endif
-
 // Louvain法によるクラスタリング
 std::vector<int> Louvain_from_Boost(const Graph& G) {
     igraph_rng_seed(igraph_rng_default(), 42u);  // 任意の固定シードで実行時の再現性を確保
