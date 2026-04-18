@@ -84,9 +84,9 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     const igraph_integer_t levels = igraph_vector_size(&modularity);
     const igraph_integer_t comm_count = igraph_vector_int_max(&membership) + 1;
 
-    std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
-    std::cout << "communities: " << comm_count << "\n";
-    std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
+    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
+    // std::cout << "communities: " << comm_count << "\n";
+    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
 
     for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i)
         result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
@@ -112,9 +112,10 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     const long levels = igraph_vector_size(&modularity);
     const long comm_count = static_cast<long>(igraph_vector_max(&membership)) + 1;
 
-    std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
-    std::cout << "communities: " << comm_count << "\n";
-    std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
+    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
+    // std::cout << "communities: " << comm_count << "\n";
+    std::cout << "NB = " << comm_count;
+    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
 
     for (long i = 0; i < igraph_vector_size(&membership); ++i)
         result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
@@ -205,7 +206,7 @@ int main(int argc, char** argv) {
         //           << ", internal_edges=" << internal[b]
         //           << ", avg_deg=" << avg_deg << "\n";
     }
-    std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
+    // std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロック間結合度の評価
@@ -229,8 +230,8 @@ int main(int argc, char** argv) {
         // std::cout << "Block " << b << ": degree=" << deg << "\n";
         total_avg += deg;
     }
-    std::cout << "Block graph average degree: "
-              << (nb > 0 ? total_avg / nb : 0.0) << "\n";
+    // std::cout << "Block graph average degree: "
+    //           << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
@@ -251,9 +252,10 @@ int main(int argc, char** argv) {
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
+    std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
     double Q = Modularity_Unweighted(G, block_of);
-    std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
     return 0;
 }
