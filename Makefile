@@ -10,9 +10,9 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 endif
 
-TARGET = abmc louvain gmc
+TARGET = abmc louvain gmc rblock
 
-ASRCS := abmc.cpp
+ASRCS := abmc.cpp 
 AOBJS := $(ASRCS:.cpp=.o)
 AHDRS := $(ASRCS:.cpp=.hpp)
 
@@ -23,6 +23,10 @@ LHDRS := $(LSRCS:.cpp=.hpp)
 GSRCS := gmc.cpp
 GOBJS := $(GSRCS:.cpp=.o)
 GHDRS := $(GSRCS:.cpp=.hpp)
+
+RSRCS := rblock.cpp 
+ROBJS := $(RSRCS:.cpp=.o)
+RHDRS := $(RSRCS:.cpp=.hpp)
 
 CSRCS := common/mm_io.cpp common/Coloring.cpp common/BlockIO.cpp
 COBJS := $(CSRCS:.cpp=.o)
@@ -40,6 +44,9 @@ louvain: $(LOBJS) $(COBJS)
 gmc: $(GOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
+rblock: $(ROBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
 # %.o: %.cpp $(HDRS)
 # 	$(CXX) $(CXXFLAGS) -c $<
 
@@ -51,4 +58,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(OBJS) $(COBJS) $(GOBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(GOBJS)$(ROBJS) $(COBJS)

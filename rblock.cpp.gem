@@ -1,0 +1,247 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <algorithm>
+#include <numeric>
+#include <string>
+#include <cmath>
+
+#include "common/Types.hpp"
+#include "common/mm_io.hpp"
+#include "common/Coloring.hpp"
+#include "common/BlockIO.hpp"
+#include "common/Block_Eval.hpp"
+#include "abmc.hpp" // policy_name などの利用を想定
+
+int main(int argc, char** argv) {
+    if (argc < 4) {
+        std::fprintf(stderr, "usage: %s <matrix.mtx> <louvain.blk> <block_size_s> [policy(1|2|3)]\n", argv[0]);
+        return 1;
+    }
+
+    // 1. 引数のパースとグラフの読み込み
+    std::string mtx_file = argv[1];
+    std::string blk_file = argv[2];
+    int s = std::atoi(argv[3]);
+    if (s < 1) s = 1;
+
+    int p_in = (argc >= 5) ? std::atoi(argv[4]) : 1;
+    if (p_in < 1 || p_in > 3) p_in = 1;
+    BlockPolicy policy = static_cast<BlockPolicy>(p_in);
+
+    Graph G = Read_MM_UD(mtx_file.c_str());
+    int N = num_vertices(G);
+
+    // 2. Louvain法のブロック結果の読み込み (1-based -> 0-basedに変換)
+    std::vector<int> louvain_block(N, -1);
+    std::ifstream ifs(blk_file);
+    if (!ifs) {
+        std::cerr << "Error: Cannot open block file " << blk_file << "\n";
+        return 1;
+    }
+    int max_louvain_id = -1;
+    for (int i = 0; i < N; ++i) {
+        int b;
+        if (ifs >> b) {
+            louvain_block[i] = b - 1; 
+            max_louvain_id = std::max(max_louvain_id, louvain_block[i]);
+        } else {
+            std::cerr << "Error: Block file format error at line " << i + 1 << "\n";
+            return 1;
+        }
+    }
+    int num_louvain_blocks = max_louvain_id + 1;
+
+    // ブロックIDごとに頂点を分類
+    std::vector<std::vector<int>> louvain_nodes(num_louvain_blocks);
+    for (int i = 0; i < N; ++i) {
+        if (louvain_block[i] >= 0) {
+            louvain_nodes[louvain_block[i]].push_back(i);
+        }
+    }
+
+    // 3. 再ブロック化 (Hybrid Re-blocking) の実行
+    std::vector<int> new_block_of(N, -1);
+    int current_block_id = 0;
+    auto wmap = get(boost::edge_weight, G);
+
+    for (int b = 0; b < num_louvain_blocks; ++b) {
+        const auto& nodes = louvain_nodes[b];
+        if (nodes.empty()) continue;
+
+        // 対象となるブロックは 2s よりも大きなブロック
+        if ((int)nodes.size() <= 2 * s) {
+            // 条件を満たさない（小さい）ブロックはそのまま維持
+            for (int v : nodes) {
+                new_block_of[v] = current_block_id;
+            }
+            current_block_id++;
+        } else {
+            // 対象ブロック内のノードに対してのみ ABMC を適用して分割
+            std::vector<bool> unassigned(N, false);
+            for (int v : nodes) unassigned[v] = true;
+            
+            int remaining = nodes.size();
+
+            while (remaining > 0) {
+                // 部分グラフ内から次の seed を探す
+                int seed0 = -1;
+                for (int v : nodes) {
+                    if (unassigned[v]) { seed0 = v; break; }
+                }
+                if (seed0 < 0) break;
+
+                const int target = std::min(s, remaining);
+                std::vector<char> in_block(N, 0);
+                std::vector<char> in_cand(N, 0);
+                std::vector<int> cand;
+                int assigned_this_block = 0;
+
+                auto add_to_block = [&](int v) {
+                    new_block_of[v] = current_block_id;
+                    in_block[v] = 1;
+                    unassigned[v] = false;
+                    remaining--;
+                    assigned_this_block++;
+
+                    // 追加されたノードの隣接頂点のうち、同じ旧ブロック内で未割当のものを候補に追加
+                    auto nbrs = boost::adjacent_vertices(v, G);
+                    for (auto it = nbrs.first; it != nbrs.second; ++it) {
+                        int u = (int)*it;
+                        if (unassigned[u] && !in_cand[u]) {
+                            in_cand[u] = 1;
+                            cand.push_back(u);
+                        }
+                    }
+                };
+
+                add_to_block(seed0);
+
+                while (assigned_this_block < target) {
+                    int chosen = -1;
+
+                    if (cand.empty()) {
+                        // 候補が尽きた場合は、同ブロック内から新しいseedを探す
+                        int seed = -1;
+                        for (int v : nodes) {
+                            if (unassigned[v]) { seed = v; break; }
+                        }
+                        if (seed < 0) break;
+                        chosen = seed;
+                    } else if (policy == BlockPolicy::FIFO) {
+                        while (!cand.empty() && !unassigned[cand.front()]) {
+                            in_cand[cand.front()] = 0;
+                            cand.erase(cand.begin());
+                        }
+                        if (!cand.empty()) {
+                            chosen = cand.front();
+                            in_cand[chosen] = 0;
+                            cand.erase(cand.begin());
+                        }
+                    } else { // MaxEdges または Weighted
+                        double best = -1.0;
+                        int best_idx = -1;
+
+                        for (int idx = 0; idx < (int)cand.size(); ++idx) {
+                            int v = cand[idx];
+                            if (!unassigned[v]) continue;
+
+                            double score = 0.0;
+                            auto nbrs = boost::adjacent_vertices(v, G);
+                            for (auto it = nbrs.first; it != nbrs.second; ++it) {
+                                int u = (int)*it;
+                                if (!in_block[u]) continue;
+
+                                if (policy == BlockPolicy::MaxEdges) {
+                                    score += 1.0;
+                                } else {
+                                    auto ep = boost::edge(v, u, G);
+                                    if (ep.second) {
+                                        double weight = std::abs(get(wmap, ep.first));
+                                        score += weight;
+                                    }
+                                }
+                            }
+                            if (score > best || (score == best && v < best_idx)) {
+                                best = score;
+                                best_idx = v;
+                            }
+                        }
+
+                        if (best_idx != -1) {
+                            chosen = best_idx;
+                            auto it = std::find(cand.begin(), cand.end(), chosen);
+                            if (it != cand.end()) cand.erase(it);
+                            in_cand[chosen] = 0;
+                        } else {
+                            int seed = -1;
+                            for (int v : nodes) {
+                                if (unassigned[v]) { seed = v; break; }
+                            }
+                            if (seed < 0) break;
+                            chosen = seed;
+                        }
+                    }
+
+                    if (chosen == -1) break;
+                    add_to_block(chosen);
+                }
+                current_block_id++; // 新しいサブブロックが完成
+            }
+        }
+    }
+
+    int nb = current_block_id; // 最終的なブロック数
+
+    std::cout << "Re-blocking Finished.\n";
+    std::cout << "Original Louvain Blocks: " << num_louvain_blocks << "\n";
+    std::cout << "New Total Blocks: " << nb << "\n";
+
+    // 4. ブロックグラフの作成と評価
+    Graph T = BuildBlockGraph(G, new_block_of, BlockEdgeWeight::Binary);
+
+    auto internal = CountInternalEdges(G, new_block_of, nb);
+    std::vector<int> sizes(nb, 0);
+    for (int i = 0; i < N; ++i) {
+        if (new_block_of[i] >= 0) sizes[new_block_of[i]]++;
+    }
+
+    double total_avg = 0.0;
+    for (int b = 0; b < nb; ++b) {
+        double avg_deg = (sizes[b] > 0) ? 2.0 * internal[b] / sizes[b] : 0.0;
+        total_avg += avg_deg;
+    }
+    std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
+
+    total_avg = 0.0;
+    for (int b = 0; b < nb; ++b) {
+        int deg = boost::degree(b, T);
+        total_avg += deg;
+    }
+    std::cout << "Block graph average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
+
+    // 5. ブロックグラフの彩色
+    std::vector<int> block_color;
+    int nc = Greedy_Coloring(T, block_color);
+    RelabelColorsByClassSize(block_color);
+
+    // 出力ファイル名の生成
+    std::string stem = file_stem(mtx_file.c_str());
+    stem += "_rblock_s" + std::to_string(s);
+    stem += "_p" + std::to_string(p_in);
+    std::string blk_path  = stem + ".blk";
+    std::string bcol_path = stem + ".bcol";
+
+    // データ出力 (1-based に変換して書き込み)
+    WriteBlockInfo_1Based(new_block_of, blk_path);
+    WriteBlockColor_1Based(block_color, nc, bcol_path);
+
+    // モジュラリティ計算
+    double Q_unw = Modularity_Unweighted(G, new_block_of);
+    std::printf("Modularity (unweighted) = %.6f\n", Q_unw);
+    // double Q_w = Modularity_Weighted(G, new_block_of);
+    // std::printf("Modularity (weighted)   = %.6f\n", Q_w);
+
+    return 0;
+}
