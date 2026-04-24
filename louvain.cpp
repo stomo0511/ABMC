@@ -193,11 +193,13 @@ int main(int argc, char** argv) {
     
     //////////////////////////////////////////////
     // ブロックグラフの作成
-    Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
+    // Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
+    Graph T = BuildBlockGraph(G, dense, BlockEdgeWeight::Binary);
 
     //////////////////////////////////////////////
     // ブロック内結合度の評価
-    auto internal = CountInternalEdges(G, block_of, nb);
+    // auto internal = CountInternalEdges(G, block_of, nb);
+    auto internal = CountInternalEdges(G, dense, nb);
     double total_avg = 0.0;
     for (int b = 0; b < nb; ++b) {
         double avg_deg = (sizes[b] > 0) ? 2.0 * internal[b] / sizes[b] : 0.0;
@@ -248,14 +250,16 @@ int main(int argc, char** argv) {
     std::string bcol_path = stem + ".bcol";
 
     // ブロック情報データの出力
-    WriteBlockInfo_1Based(block_of, blk_path);
+    // WriteBlockInfo_1Based(block_of, blk_path);
+    WriteBlockInfo_1Based(dense, blk_path);
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
     std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
-    double Q = Modularity_Unweighted(G, block_of);
+    // double Q = Modularity_Unweighted(G, block_of);
+    double Q = Modularity_Unweighted(G, dense);
     // std::printf("Modularity (unweighted)   = %.6f\n", Q);
     return 0;
 }
