@@ -11,6 +11,17 @@ extern "C" {
     #include <igraph/igraph.h>
 }
 
+// 0.10判定マクロ（0.9では未定義のことがあるので保険）
+#ifndef IGRAPH_VERSION_MAJOR
+#  define IGRAPH_VERSION_MAJOR 0
+#  define IGRAPH_VERSION_MINOR 9
+#endif
+#if (IGRAPH_VERSION_MAJOR > 0) || (IGRAPH_VERSION_MAJOR==0 && IGRAPH_VERSION_MINOR>=10)
+#  define IGRAPH_AT_LEAST_010 1
+#else
+#  define IGRAPH_AT_LEAST_010 0
+#endif
+
 // Louvain法によるクラスタリング
 std::vector<int> Louvain_from_Boost(const Graph& G) {
     igraph_rng_seed(igraph_rng_default(), 42u);  // 任意の固定シードで実行時の再現性を確保
@@ -73,9 +84,9 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     const igraph_integer_t levels = igraph_vector_size(&modularity);
     const igraph_integer_t comm_count = igraph_vector_int_max(&membership) + 1;
 
-    std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
-    std::cout << "communities: " << comm_count << "\n";
-    std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
+    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
+    // std::cout << "communities: " << comm_count << "\n";
+    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
 
     for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i)
         result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
@@ -101,9 +112,10 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     const long levels = igraph_vector_size(&modularity);
     const long comm_count = static_cast<long>(igraph_vector_max(&membership)) + 1;
 
-    std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
-    std::cout << "communities: " << comm_count << "\n";
-    std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
+    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
+    // std::cout << "communities: " << comm_count << "\n";
+    std::cout << "NB = " << comm_count;
+    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
 
     for (long i = 0; i < igraph_vector_size(&membership); ++i)
         result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
@@ -181,11 +193,13 @@ int main(int argc, char** argv) {
     
     //////////////////////////////////////////////
     // ブロックグラフの作成
-    Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
+    // Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
+    Graph T = BuildBlockGraph(G, dense, BlockEdgeWeight::Binary);
 
     //////////////////////////////////////////////
     // ブロック内結合度の評価
-    auto internal = CountInternalEdges(G, block_of, nb);
+    // auto internal = CountInternalEdges(G, block_of, nb);
+    auto internal = CountInternalEdges(G, dense, nb);
     double total_avg = 0.0;
     for (int b = 0; b < nb; ++b) {
         double avg_deg = (sizes[b] > 0) ? 2.0 * internal[b] / sizes[b] : 0.0;
@@ -194,7 +208,7 @@ int main(int argc, char** argv) {
         //           << ", internal_edges=" << internal[b]
         //           << ", avg_deg=" << avg_deg << "\n";
     }
-    std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
+    // std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロック間結合度の評価
@@ -218,8 +232,8 @@ int main(int argc, char** argv) {
         // std::cout << "Block " << b << ": degree=" << deg << "\n";
         total_avg += deg;
     }
-    std::cout << "Block graph average degree: "
-              << (nb > 0 ? total_avg / nb : 0.0) << "\n";
+    // std::cout << "Block graph average degree: "
+    //           << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
@@ -236,13 +250,16 @@ int main(int argc, char** argv) {
     std::string bcol_path = stem + ".bcol";
 
     // ブロック情報データの出力
-    WriteBlockInfo_1Based(block_of, blk_path);
+    // WriteBlockInfo_1Based(block_of, blk_path);
+    WriteBlockInfo_1Based(dense, blk_path);
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
+    std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
-    double Q = Modularity_Unweighted(G, block_of);
-    std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    // double Q = Modularity_Unweighted(G, block_of);
+    double Q = Modularity_Unweighted(G, dense);
+    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
     return 0;
 }
