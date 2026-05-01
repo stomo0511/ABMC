@@ -11,157 +11,117 @@ extern "C" {
     #include <igraph/igraph.h>
 }
 
-// 0.10判定マクロ（0.9では未定義のことがあるので保険）
 #ifndef IGRAPH_VERSION_MAJOR
 #  define IGRAPH_VERSION_MAJOR 0
 #  define IGRAPH_VERSION_MINOR 9
+#  define IGRAPH_VERSION_PATCH 0
 #endif
-#if (IGRAPH_VERSION_MAJOR > 0) || (IGRAPH_VERSION_MAJOR==0 && IGRAPH_VERSION_MINOR>=10)
+
+#if (IGRAPH_VERSION_MAJOR >= 1)
+#  define IGRAPH_AT_LEAST_100 1
+#else
+#  define IGRAPH_AT_LEAST_100 0
+#endif
+
+#if (IGRAPH_VERSION_MAJOR > 0) || \
+    (IGRAPH_VERSION_MAJOR == 0 && IGRAPH_VERSION_MINOR >= 10)
 #  define IGRAPH_AT_LEAST_010 1
 #else
 #  define IGRAPH_AT_LEAST_010 0
 #endif
 
+#if (IGRAPH_VERSION_MAJOR > 0) || \
+    (IGRAPH_VERSION_MAJOR == 0 && IGRAPH_VERSION_MINOR > 10) || \
+    (IGRAPH_VERSION_MAJOR == 0 && IGRAPH_VERSION_MINOR == 10 && IGRAPH_VERSION_PATCH >= 17)
+#  define IGRAPH_HAS_LEIDEN_SIMPLE 1
+#else
+#  define IGRAPH_HAS_LEIDEN_SIMPLE 0
+#endif
+
 // Leiden法によるクラスタリング
 std::vector<int> Leiden_from_Boost(const Graph& G) {
-    igraph_rng_seed(igraph_rng_default(), 42u);  // 任意の固定シードで実行時の再現性を確保
+    igraph_rng_seed(igraph_rng_default(), 42u);
 
-    // 1) igraph を頂点数指定で初期化（無向）
     igraph_t ig;
-    if (igraph_empty(&ig, static_cast<igraph_integer_t>(num_vertices(G)), IGRAPH_UNDIRECTED)) {
+    if (igraph_empty(&ig,
+                     static_cast<igraph_integer_t>(num_vertices(G)),
+                     IGRAPH_UNDIRECTED)) {
         throw std::runtime_error("igraph_empty failed");
     }
 
-    // 2) Boost.Graph の辺を igraph の edges ベクタ（u0, v0, u1, v1, ...）へ
     std::vector<igraph_integer_t> edge_list;
     edge_list.reserve(2 * num_edges(G));
+
     for (auto e : boost::make_iterator_range(edges(G))) {
         edge_list.push_back(static_cast<igraph_integer_t>(source(e, G)));
         edge_list.push_back(static_cast<igraph_integer_t>(target(e, G)));
     }
 
-    // 3) view（所有権なし）を作って add_edges
-    //    ※ 0.10系は「戻り値で view を返す」2引数API
-    std::vector<int> result(num_vertices(G), 0);
-
     int rc = IGRAPH_SUCCESS;
 
 #if IGRAPH_AT_LEAST_010
-    // igraph_vector_int_t edge_vec;
-    // igraph_vector_int_view(&edge_vec, edge_list.data(),
-    //                         static_cast<igraph_integer_t>(edge_list.size()));
     igraph_vector_int_t edge_vec =
         igraph_vector_int_view(
             edge_list.data(),
             static_cast<igraph_integer_t>(edge_list.size())
         );
-    rc = igraph_add_edges(&ig, &edge_vec, /*attr=*/nullptr);
 
+    rc = igraph_add_edges(&ig, &edge_vec, nullptr);
 #else
-    igraph_vector_t evec;
-    igraph_vector_init(&evec, static_cast<long>(edge_list.size()));
-    for (long i = 0; i < static_cast<long>(edge_list.size()); ++i) {
-        VECTOR(evec)[i] = static_cast<igraph_real_t>(edge_list[i]);
-    }
-    rc = igraph_add_edges(&ig, &evec, /*attr=*/nullptr);
-    igraph_vector_destroy(&evec);
+#   error "Leiden requires igraph 0.10 or later"
 #endif
 
     if (rc != IGRAPH_SUCCESS) {
-            igraph_destroy(&ig);
-            throw std::runtime_error("igraph_add_edges failed: " + std::to_string(rc));
-        }
+        igraph_destroy(&ig);
+        throw std::runtime_error("igraph_add_edges failed: " + std::to_string(rc));
+    }
 
-    // 4) Leiden (multilevel) 実行
-#if IGRAPH_AT_LEAST_010
+#if !IGRAPH_HAS_LEIDEN_SIMPLE
+#   error "igraph_community_leiden_simple requires igraph 0.10.17 or later"
+#endif
+
+    std::vector<int> result(num_vertices(G), 0);
+
     igraph_vector_int_t membership;
-    igraph_matrix_int_t memberships;
-    igraph_vector_t modularity;
     igraph_vector_int_init(&membership, 0);
-    igraph_matrix_int_init(&memberships, 0, 0);
-    igraph_vector_init(&modularity, 0);
 
-    rc = igraph_community_multilevel(
-        &ig, /*weights*/ nullptr, /*resolution*/ 1.0,
-        &membership, &memberships, &modularity);
-    if (rc != IGRAPH_SUCCESS) { throw std::runtime_error("community_multilevel failed"); }
-
-    const igraph_integer_t levels = igraph_vector_size(&modularity);
-    const igraph_integer_t comm_count = igraph_vector_int_max(&membership) + 1;
-
-    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
-    // std::cout << "communities: " << comm_count << "\n";
-    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
-
-    for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i)
-        result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
-
-    igraph_vector_int_destroy(&membership);
-    igraph_matrix_int_destroy(&memberships);
-    igraph_vector_destroy(&modularity);
-
+#if IGRAPH_AT_LEAST_100
+    igraph_int_t nb_clusters = 0;
 #else
-    igraph_vector_t membership;      // 実数ベクタ（中身は整数ID）
-    igraph_vector_t node_weights;    // modularity 用の頂点重み = 次数
-    igraph_integer_t nb_clusters;    // クラスタ数
-    igraph_real_t quality;           // Leiden の最終 quality 値
+    igraph_integer_t nb_clusters = 0;
+#endif
 
-    igraph_vector_init(&membership, 0);
-    igraph_vector_init(&node_weights, igraph_vcount(&ig));
+    igraph_real_t quality = 0.0;
 
-    // 無向グラフなので、次数を node_weights として使う
-    rc = igraph_degree(
+    rc = igraph_community_leiden_simple(
         &ig,
-        &node_weights,
-        igraph_vss_all(),
-        IGRAPH_ALL,
-        /* loops */ 1
-    );
-    if (rc != IGRAPH_SUCCESS) {
-        igraph_vector_destroy(&node_weights);
-        igraph_vector_destroy(&membership);
-        igraph_destroy(&ig);
-        throw std::runtime_error("igraph_degree failed");
-    }
-
-    const double gamma = 1.0;
-    const igraph_real_t resolution =
-        gamma / (2.0 * static_cast<igraph_real_t>(igraph_ecount(&ig)));
-    // const igraph_real_t resolution = 1.0;
-    // std::cout << " resolution = " << resolution << "\n";
-
-
-    // Leiden法の実行
-    rc = igraph_community_leiden(
-        &ig,
-        /* edge_weights */ nullptr,
-        /* node_weights */ &node_weights,
-        /* resolution */ resolution,
+        /* weights */ nullptr,
+        /* objective */ IGRAPH_LEIDEN_OBJECTIVE_MODULARITY,
+        /* resolution */ 1.0,
         /* beta */ 0.01,
-        /* start */ 0,
-        &membership, 
+        /* start */ false,
+        /* n_iterations */ -1,
+        &membership,
         &nb_clusters,
-        &quality);
+        &quality
+    );
 
     if (rc != IGRAPH_SUCCESS) {
-        igraph_vector_destroy(&membership);
+        igraph_vector_int_destroy(&membership);
         igraph_destroy(&ig);
-        throw std::runtime_error("community_leiden failed");
+        throw std::runtime_error("community_leiden_simple failed: " + std::to_string(rc));
     }
 
-    const long comm_count = static_cast<long>(nb_clusters);
+    std::cout << "NB = " << nb_clusters;
 
-    std::cout << "NB = " << comm_count;
-
-    for (long i = 0; i < igraph_vector_size(&membership); ++i) {
+    for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i) {
         result[static_cast<size_t>(i)] =
             static_cast<int>(VECTOR(membership)[i]);
     }
 
-    igraph_vector_destroy(&membership);
-#endif
-
+    igraph_vector_int_destroy(&membership);
     igraph_destroy(&ig);
+
     return result;
 }
 

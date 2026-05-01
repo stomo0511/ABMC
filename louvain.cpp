@@ -91,6 +91,7 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
 
     // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
     // std::cout << "communities: " << comm_count << "\n";
+    std::cout << "NB = " << comm_count;
     // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
 
     for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i)
