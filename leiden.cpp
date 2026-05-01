@@ -47,9 +47,14 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
     int rc = IGRAPH_SUCCESS;
 
 #if IGRAPH_AT_LEAST_010
-    igraph_vector_int_t edge_vec;
-    igraph_vector_int_view(&edge_vec, edge_list.data(),
-                            static_cast<igraph_integer_t>(edge_list.size()));
+    // igraph_vector_int_t edge_vec;
+    // igraph_vector_int_view(&edge_vec, edge_list.data(),
+    //                         static_cast<igraph_integer_t>(edge_list.size()));
+    igraph_vector_int_t edge_vec =
+        igraph_vector_int_view(
+            edge_list.data(),
+            static_cast<igraph_integer_t>(edge_list.size())
+        );
     rc = igraph_add_edges(&ig, &edge_vec, /*attr=*/nullptr);
 
 #else

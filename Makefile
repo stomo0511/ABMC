@@ -18,7 +18,7 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 endif
 
-TARGET = abmc louvain gmc rabmc rabbit rcm leiden
+TARGET = gmc abmc louvain leiden
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
