@@ -18,7 +18,7 @@ ifeq ($(UNAME), Darwin)
 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 endif
 
-TARGET = abmc louvain gmc rabmc rabbit rcm
+TARGET = abmc louvain gmc rabmc rabbit rcm leiden
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -27,6 +27,10 @@ AHDRS := $(ASRCS:.cpp=.hpp)
 LSRCS := louvain.cpp
 LOBJS := $(LSRCS:.cpp=.o)
 LHDRS := $(LSRCS:.cpp=.hpp)
+
+L2SRCS := leiden.cpp
+L2OBJS := $(L2SRCS:.cpp=.o)
+L2HDRS := $(L2SRCS:.cpp=.hpp)
 
 GSRCS := gmc.cpp
 GOBJS := $(GSRCS:.cpp=.o)
@@ -54,6 +58,9 @@ abmc: $(AOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 louvain: $(LOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+leiden: $(L2OBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 gmc: $(GOBJS) $(COBJS)
