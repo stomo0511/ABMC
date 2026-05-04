@@ -93,14 +93,28 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
 
     igraph_real_t quality = 0.0;
 
+    // // Modularity
+    // rc = igraph_community_leiden_simple(
+    //     &ig,
+    //     /* weights */ nullptr,
+    //     /* objective */ IGRAPH_LEIDEN_OBJECTIVE_MODULARITY,
+    //     /* resolution */ 1.0,
+    //     /* beta */ 0.01,
+    //     /* start */ false,
+    //     /* n_iterations */ 5,
+    //     &membership,
+    //     &nb_clusters,
+    //     &quality
+    // );
+    // CPM
     rc = igraph_community_leiden_simple(
         &ig,
         /* weights */ nullptr,
-        /* objective */ IGRAPH_LEIDEN_OBJECTIVE_MODULARITY,
-        /* resolution */ 1.0,
+        /* objective */ IGRAPH_LEIDEN_OBJECTIVE_CPM,
+        /* resolution */ 1.0e-4,
         /* beta */ 0.01,
         /* start */ false,
-        /* n_iterations */ -1,
+        /* n_iterations */ 5,
         &membership,
         &nb_clusters,
         &quality
