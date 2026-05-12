@@ -101,7 +101,7 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         /* resolution */ 1.0,
         /* beta */ 0.01,
         /* start */ false,
-        /* n_iterations */ 5,
+        /* n_iterations */ 2,
         &membership,
         &nb_clusters,
         &quality
