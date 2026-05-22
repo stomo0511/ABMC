@@ -27,7 +27,15 @@ ifeq ($(UNAME), Linux)
 	LDFLAGS := -L$(IGP_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph -lopenblas
 endif
 
-TARGET = gmc abmc louvain leiden
+ifeq ($(UNAME), Darwin)
+	GVE_OMP_CXXFLAGS = -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
+	GVE_OMP_LDFLAGS  = -L/opt/homebrew/opt/libomp/lib -lomp
+else
+	GVE_OMP_CXXFLAGS = -fopenmp
+	GVE_OMP_LDFLAGS  = -fopenmp
+endif
+
+TARGET = gmc abmc louvain leiden gve-leiden
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -40,6 +48,10 @@ LHDRS := $(LSRCS:.cpp=.hpp)
 L2SRCS := leiden.cpp
 L2OBJS := $(L2SRCS:.cpp=.o)
 L2HDRS := $(L2SRCS:.cpp=.hpp)
+
+GVESRCS := gve-leiden.cpp
+GVEOBJS := $(GVESRCS:.cpp=.o)
+GVEHDRS := $(wildcard gve-leiden-inc/*.hxx)
 
 GSRCS := gmc.cpp
 GOBJS := $(GSRCS:.cpp=.o)
@@ -72,6 +84,9 @@ louvain: $(LOBJS) $(COBJS)
 leiden: $(L2OBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
+gve-leiden: $(GVEOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -o $@ $^ $(LDFLAGS) $(GVE_OMP_LDFLAGS)
+
 gmc: $(GOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -90,6 +105,9 @@ rcm: $(MOBJS) $(COBJS)
 rabmc.o: CXXFLAGS += -fopenmp
 rabbit.o: CXXFLAGS += -fopenmp
 
+gve-leiden.o: gve-leiden.cpp $(GVEHDRS)
+	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -c $< -o $@
+
 common/%.o: common/%.cpp $(CHDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -98,4 +116,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(COBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(COBJS)
