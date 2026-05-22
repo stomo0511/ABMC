@@ -1,5 +1,6 @@
 #include <queue>
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 #include "common/Types.hpp"
 #include "common/mm_io.hpp"
@@ -37,6 +38,13 @@ extern "C" {
 #else
 #  define IGRAPH_HAS_LEIDEN_SIMPLE 0
 #endif
+
+using Clock = std::chrono::steady_clock;
+
+static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
+{
+    return std::chrono::duration<double>(end - begin).count();
+}
 
 // Leiden法によるクラスタリング
 std::vector<int> Leiden_from_Boost(const Graph& G) {
@@ -93,6 +101,8 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
 
     igraph_real_t quality = 0.0;
 
+    // auto igraph_leiden_begin = Clock::now();
+
     // Modularity
     rc = igraph_community_leiden_simple(
         &ig,
@@ -106,6 +116,9 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         &nb_clusters,
         &quality
     );
+    // auto igraph_leiden_end = Clock::now();
+    // std::cout << " time_igraph_community_leiden_simple_sec = "
+    //           << elapsed_seconds(igraph_leiden_begin, igraph_leiden_end);
     // CPM
     // rc = igraph_community_leiden_simple(
     //     &ig,
@@ -126,7 +139,7 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         throw std::runtime_error("community_leiden_simple failed: " + std::to_string(rc));
     }
 
-    std::cout << "NB = " << nb_clusters;
+    // std::cout << "NB = " << nb_clusters;
 
     for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i) {
         result[static_cast<size_t>(i)] =
@@ -192,19 +205,37 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // auto read_begin = Clock::now();
     Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
+    // auto read_end = Clock::now();
+    // std::cout << "time_Read_MM_UD_sec = "
+    //           << elapsed_seconds(read_begin, read_end) << "\n";
 
+    auto after_read_to_write_begin = Clock::now();
+
+    // auto leiden_begin = Clock::now();
     std::vector<int> block_of = Leiden_from_Boost(G);
+    // auto leiden_end = Clock::now();
+    // std::cout << " time_Leiden_from_Boost_sec = "
+    //           << elapsed_seconds(leiden_begin, leiden_end);
 
+    // auto relabel_begin = Clock::now();
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
+    // auto relabel_end = Clock::now();
+    // std::cout << " time_relabel_dense_sec = "
+    //           << elapsed_seconds(relabel_begin, relabel_end);
 
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
     
     //////////////////////////////////////////////
     // ブロックグラフの作成
     // Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
+    // auto block_graph_begin = Clock::now();
     Graph T = BuildBlockGraph(G, dense, BlockEdgeWeight::Binary);
+    // auto block_graph_end = Clock::now();
+    // std::cout << " time_BuildBlockGraph_sec = "
+    //           << elapsed_seconds(block_graph_begin, block_graph_end);
 
     //////////////////////////////////////////////
     // ブロック内結合度の評価
@@ -248,10 +279,14 @@ int main(int argc, char** argv) {
     //////////////////////////////////////////////
     // ブロックグラフの彩色
     std::vector<int> block_color;
+    // auto coloring_begin = Clock::now();
     int nc = Greedy_Coloring(T, block_color);
 
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);
+    // auto coloring_end = Clock::now();
+    // std::cout << " time_coloring_sec = "
+    //           << elapsed_seconds(coloring_begin, coloring_end);
 
     // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
     std::string stem = file_stem(argv[1]);
@@ -261,15 +296,26 @@ int main(int argc, char** argv) {
 
     // ブロック情報データの出力
     // WriteBlockInfo_1Based(block_of, blk_path);
+    // auto write_begin = Clock::now();
     WriteBlockInfo_1Based(dense, blk_path);
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
-    std::cout << " NC = " << nc << "\n";
+    // auto write_end = Clock::now();
+    // std::cout << " time_write_blocks_sec = "
+    //           << elapsed_seconds(write_begin, write_end);
+    auto after_read_to_write_end = Clock::now();
+    // std::cout << "time_after_read_to_write_sec = "
+    //           << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end) << "\n";
+    // std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
     // double Q = Modularity_Unweighted(G, block_of);
     double Q = Modularity_Unweighted(G, dense);
     // std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    std::cout << "time = " << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end)
+              << " NB = " << nb
+              << " NC = " << nc
+              << " modularity = " << Q << "\n";
     return 0;
 }

@@ -1,5 +1,6 @@
 #include <queue>
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 #include "common/Types.hpp"
 #include "common/mm_io.hpp"
@@ -7,6 +8,13 @@
 #include "common/BlockIO.hpp"
 #include "common/Block_Eval.hpp"
 #include "abmc.hpp"
+
+using Clock = std::chrono::steady_clock;
+
+static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
+{
+    return std::chrono::duration<double>(end - begin).count();
+}
 
 // ブロック化（ポリシー選択あり）
 BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
@@ -144,6 +152,8 @@ int main(int argc, char** argv) {
     }
 
     Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
+    auto after_read_to_write_begin = Clock::now();
+
     int N  = num_vertices(G);         // ノード数
     int B = std::atoi(argv[2]);       // ブロック数
     int bs = N % B == 0 ? N / B : N / B + 1;  // ブロックサイズ
@@ -159,8 +169,8 @@ int main(int argc, char** argv) {
 
     //////////////////////////////////////////////
     // デバッグ用出力
-    std::printf("ABMC blocking with %s\n", policy_name(policy));
-    std::printf("#blocks=%d, block size=%d\n", B, part.s);
+    // std::printf("ABMC blocking with %s\n", policy_name(policy));
+    // std::printf("#blocks=%d, block size=%d\n", B, part.s);
     // DumpBlocks(part);
 
     //////////////////////////////////////////////
@@ -177,15 +187,15 @@ int main(int argc, char** argv) {
         double avg_deg = (n > 0) ? 2.0 * internal[b] / n : 0.0;
         total_avg += avg_deg;
     }
-    std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+    // std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
     total_avg = 0.0;
     for (int b = 0; b < part.nb; ++b) {
         int deg = boost::degree(b, T);
         total_avg += deg;
     }
-    std::cout << "Block graph average degree: "
-              << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
+    // std::cout << "Block graph average degree: "
+    //           << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
@@ -213,12 +223,18 @@ int main(int argc, char** argv) {
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
+    auto after_read_to_write_end = Clock::now();
 
     // --- モジュラリティ（未加重）
     double Q = Modularity_Unweighted(G, part.block_of);
-    std::printf("Modularity (unweighted)   = %.6f\n", Q);
-    Q = Modularity_Weighted(G, part.block_of);
-    std::printf("Modularity (weighted)   = %.6f\n", Q);
+    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
+    // double Qw = Modularity_Weighted(G, part.block_of);
+    // std::printf("Modularity (weighted)   = %.6f\n", Qw);
+
+    std::cout << "time = " << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end)
+              << " NB = " << part.nb
+              << " NC = " << nc
+              << " modularity = " << Q << "\n";
 
     return 0;
 }
