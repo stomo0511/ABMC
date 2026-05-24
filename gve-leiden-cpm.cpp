@@ -6,8 +6,10 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
+#include "common/Types.hpp"
 #include "gve-leiden-inc/main.hxx"
 #include "inc/cpm_properties.hxx"
 #include "inc/cpm_leiden.hxx"
@@ -47,6 +49,157 @@ static void write_partition_1based(
       throw std::runtime_error("unassigned node in partition");
     }
     out << (i + 1) << " " << (block + 1) << "\n";
+  }
+}
+
+static void write_block_color_1based(
+  const std::vector<int>& block_color,
+  int color_count,
+  const std::string& out_path)
+{
+  std::ofstream out(out_path);
+  if (!out) {
+    throw std::runtime_error("cannot open output: " + out_path);
+  }
+
+  out << color_count << "\n";
+  for (std::size_t block = 0; block < block_color.size(); ++block) {
+    const int color = block_color[block];
+    if (color < 0 || color >= color_count) {
+      throw std::runtime_error("block color out of range");
+    }
+    out << (block + 1) << " " << (color + 1) << "\n";
+  }
+}
+
+static std::string default_bcol_path(const std::string& blk_path)
+{
+  const std::size_t slash = blk_path.find_last_of("/\\");
+  const std::size_t dot = blk_path.find_last_of('.');
+  if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) {
+    return blk_path.substr(0, dot) + ".bcol";
+  }
+  return blk_path + ".bcol";
+}
+
+template <class GveGraph>
+static Graph build_block_graph_from_gve(
+  const GveGraph& graph,
+  const std::vector<int>& block_of,
+  int block_count)
+{
+  struct EdgeHash {
+    std::size_t operator()(std::uint64_t key) const {
+      return static_cast<std::size_t>(key ^ (key >> 32));
+    }
+  };
+
+  std::unordered_set<std::uint64_t, EdgeHash> block_edges;
+  block_edges.reserve(graph.size());
+
+  graph.forEachVertexKey([&](auto u) {
+    if (u == 0) return;
+    const std::size_t node_u = static_cast<std::size_t>(u - 1);
+    if (node_u >= block_of.size()) return;
+
+    const int bu = block_of[node_u];
+    if (bu < 0) return;
+
+    graph.forEachEdgeKey(u, [&](auto v) {
+      if (v == 0) return;
+      const std::size_t node_v = static_cast<std::size_t>(v - 1);
+      if (node_v >= block_of.size()) return;
+
+      const int bv = block_of[node_v];
+      if (bv < 0 || bu == bv) return;
+
+      const std::uint32_t a = static_cast<std::uint32_t>(std::min(bu, bv));
+      const std::uint32_t b = static_cast<std::uint32_t>(std::max(bu, bv));
+      block_edges.insert((static_cast<std::uint64_t>(a) << 32) | b);
+    });
+  });
+
+  Graph block_graph(block_count);
+  auto weights = get(boost::edge_weight, block_graph);
+  for (const std::uint64_t key : block_edges) {
+    const int bu = static_cast<int>(key >> 32);
+    const int bv = static_cast<int>(key & 0xffffffffu);
+    auto edge = add_edge(bu, bv, block_graph).first;
+    weights[edge] = 1.0;
+  }
+
+  return block_graph;
+}
+
+static int greedy_coloring(const Graph& graph, std::vector<int>& color)
+{
+  using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
+
+  struct VertexDegree {
+    Vertex vertex;
+    std::size_t degree;
+  };
+
+  const std::size_t n = boost::num_vertices(graph);
+  color.assign(n, -1);
+
+  std::vector<VertexDegree> order;
+  order.reserve(n);
+  for (Vertex v = 0; v < n; ++v) {
+    order.push_back({v, boost::degree(v, graph)});
+  }
+
+  std::sort(order.begin(), order.end(), [](const VertexDegree& a, const VertexDegree& b) {
+    if (a.degree != b.degree) return a.degree > b.degree;
+    return a.vertex < b.vertex;
+  });
+
+  std::vector<int> mark(n + 1, -1);
+  int stamp = 0;
+  int max_color = -1;
+
+  for (const auto& item : order) {
+    const Vertex u = item.vertex;
+    ++stamp;
+
+    auto adjacent = boost::adjacent_vertices(u, graph);
+    for (auto it = adjacent.first; it != adjacent.second; ++it) {
+      const int c = color[*it];
+      if (c >= 0) mark[c] = stamp;
+    }
+
+    int c = 0;
+    while (c <= max_color && mark[c] == stamp) ++c;
+    if (c == max_color + 1) ++max_color;
+    color[u] = c;
+  }
+
+  return max_color + 1;
+}
+
+static void relabel_colors_by_class_size(std::vector<int>& color)
+{
+  if (color.empty()) return;
+
+  const int color_count = 1 + *std::max_element(color.begin(), color.end());
+  std::vector<int> counts(color_count, 0);
+  for (const int c : color) {
+    if (c >= 0) ++counts[c];
+  }
+
+  std::vector<int> order(color_count);
+  for (int i = 0; i < color_count; ++i) order[i] = i;
+  std::sort(order.begin(), order.end(), [&](int a, int b) {
+    if (counts[a] != counts[b]) return counts[a] > counts[b];
+    return a < b;
+  });
+
+  std::vector<int> new_id(color_count, -1);
+  for (int i = 0; i < color_count; ++i) {
+    new_id[order[i]] = i;
+  }
+  for (int& c : color) {
+    if (c >= 0) c = new_id[c];
   }
 }
 
@@ -172,14 +325,25 @@ int main(int argc, char** argv)
   if (output_path.empty()) {
     output_path = file_stem_local(file) + "_gveleiden_cpm.blk";
   }
+
+  const int block_count = static_cast<int>(result.communities);
+  Graph block_graph = build_block_graph_from_gve(graph, block_of, block_count);
+  std::vector<int> block_color;
+  const int color_count = greedy_coloring(block_graph, block_color);
+  relabel_colors_by_class_size(block_color);
+
+  const std::string bcol_path = default_bcol_path(output_path);
   write_partition_1based(block_of, output_path);
+  write_block_color_1based(block_color, color_count, bcol_path);
 
   std::cout << "objective = CPM"
             << " gamma = " << options.gamma
             << " NB = " << result.communities
+            << " NC = " << color_count
             << " quality = " << result.quality
             << " time = " << elapsed_seconds(begin, end)
             << " output = " << output_path
+            << " bcol = " << bcol_path
             << "\n";
 
   return 0;

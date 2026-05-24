@@ -14,7 +14,7 @@
 
 // Options for CPM-maximizing Leiden.
 struct CPMLeidenOptions {
-  double gamma = 1.0;
+  double gamma = 0.001;
   double tolerance = 1.0e-2;
   double aggregationTolerance = 0.8;
   double toleranceDrop = 10.0;
