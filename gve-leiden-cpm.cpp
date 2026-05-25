@@ -6,6 +6,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -27,6 +28,55 @@ static std::string file_stem_local(const std::string& path)
   const std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
   const std::size_t dot = name.find_last_of('.');
   return dot == std::string::npos ? name : name.substr(0, dot);
+}
+
+static std::vector<int> relabel_dense(
+  const std::vector<int>& comm,
+  std::vector<int>* sizes_out = nullptr)
+{
+  const std::size_t n = comm.size();
+
+  struct Stat {
+    int label;
+    int count;
+  };
+
+  std::unordered_map<int, int> counts;
+  counts.reserve(n * 2);
+  for (const int c : comm) {
+    if (c >= 0) ++counts[c];
+  }
+
+  if (counts.empty()) {
+    if (sizes_out) sizes_out->clear();
+    return std::vector<int>(n, -1);
+  }
+
+  std::vector<Stat> order;
+  order.reserve(counts.size());
+  for (const auto& entry : counts) {
+    order.push_back({entry.first, entry.second});
+  }
+  std::sort(order.begin(), order.end(), [](const Stat& a, const Stat& b) {
+    if (a.count != b.count) return a.count > b.count;
+    return a.label < b.label;
+  });
+
+  std::unordered_map<int, int> old_to_new;
+  old_to_new.reserve(order.size());
+  if (sizes_out) sizes_out->assign(order.size(), 0);
+
+  for (int new_id = 0; new_id < static_cast<int>(order.size()); ++new_id) {
+    old_to_new[order[new_id].label] = new_id;
+    if (sizes_out) (*sizes_out)[new_id] = order[new_id].count;
+  }
+
+  std::vector<int> dense(n, -1);
+  for (std::size_t i = 0; i < n; ++i) {
+    const int c = comm[i];
+    if (c >= 0) dense[i] = old_to_new[c];
+  }
+  return dense;
 }
 
 static void write_partition_1based(
@@ -322,28 +372,29 @@ int main(int argc, char** argv)
     }
   }
 
+  std::vector<int> block_sizes;
+  std::vector<int> dense = relabel_dense(block_of, &block_sizes);
+  const std::size_t community_count = block_sizes.size();
+
   if (output_path.empty()) {
     output_path = file_stem_local(file) + "_gveleiden_cpm.blk";
   }
 
-  const int block_count = static_cast<int>(result.communities);
-  Graph block_graph = build_block_graph_from_gve(graph, block_of, block_count);
+  Graph block_graph = build_block_graph_from_gve(graph, dense, static_cast<int>(community_count));
   std::vector<int> block_color;
   const int color_count = greedy_coloring(block_graph, block_color);
   relabel_colors_by_class_size(block_color);
 
   const std::string bcol_path = default_bcol_path(output_path);
-  write_partition_1based(block_of, output_path);
+  write_partition_1based(dense, output_path);
   write_block_color_1based(block_color, color_count, bcol_path);
 
   std::cout << "objective = CPM"
             << " gamma = " << options.gamma
-            << " NB = " << result.communities
+            << " NB = " << community_count
             << " NC = " << color_count
             << " quality = " << result.quality
-            << " time = " << elapsed_seconds(begin, end)
-            << " output = " << output_path
-            << " bcol = " << bcol_path
+            // << " time = " << elapsed_seconds(begin, end)
             << "\n";
 
   return 0;
