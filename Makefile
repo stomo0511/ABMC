@@ -35,7 +35,7 @@ else
 	GVE_OMP_LDFLAGS  = -fopenmp
 endif
 
-TARGET = gmc abmc louvain leiden gve-leiden
+TARGET = gmc abmc louvain leiden gve-leiden gve-leiden-cpm
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -52,6 +52,10 @@ L2HDRS := $(L2SRCS:.cpp=.hpp)
 GVESRCS := gve-leiden.cpp
 GVEOBJS := $(GVESRCS:.cpp=.o)
 GVEHDRS := $(wildcard gve-leiden-inc/*.hxx)
+
+CPMSRCS := gve-leiden-cpm.cpp
+CPMOBJS := $(CPMSRCS:.cpp=.o)
+CPMHDRS := $(wildcard gve-leiden-inc/*.hxx) $(wildcard inc/*.hxx) common/Types.hpp
 
 GSRCS := gmc.cpp
 GOBJS := $(GSRCS:.cpp=.o)
@@ -87,6 +91,9 @@ leiden: $(L2OBJS) $(COBJS)
 gve-leiden: $(GVEOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -o $@ $^ $(LDFLAGS) $(GVE_OMP_LDFLAGS)
 
+gve-leiden-cpm: $(CPMOBJS)
+	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -o $@ $^ $(GVE_OMP_LDFLAGS)
+
 gmc: $(GOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
@@ -108,6 +115,9 @@ rabbit.o: CXXFLAGS += -fopenmp
 gve-leiden.o: gve-leiden.cpp $(GVEHDRS)
 	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -c $< -o $@
 
+gve-leiden-cpm.o: gve-leiden-cpm.cpp $(CPMHDRS)
+	$(CXX) $(CXXFLAGS) -I. $(GVE_OMP_CXXFLAGS) -c $< -o $@
+
 common/%.o: common/%.cpp $(CHDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -116,4 +126,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(COBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS)
