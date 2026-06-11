@@ -1,6 +1,5 @@
 #include <queue>
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <cerrno>
 #include <numeric>
@@ -9,16 +8,10 @@
 #include "common/Coloring.hpp"
 #include "common/BlockIO.hpp"
 #include "common/Block_Eval.hpp"
+#include "common/Timer.hpp"
 
 extern "C" {
     #include <igraph/igraph.h>
-}
-
-using Clock = std::chrono::steady_clock;
-
-static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
-{
-    return std::chrono::duration<double>(end - begin).count();
 }
 
 // Leiden法によるクラスタリング

@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -11,16 +10,10 @@
 #include <vector>
 
 #include "common/Types.hpp"
+#include "common/Timer.hpp"
 #include "gve-leiden-inc/main.hxx"
 #include "inc/cpm_properties.hxx"
 #include "inc/cpm_leiden.hxx"
-
-using Clock = std::chrono::steady_clock;
-
-static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
-{
-  return std::chrono::duration<double>(end - begin).count();
-}
 
 static std::string file_stem_local(const std::string& path)
 {
@@ -264,7 +257,7 @@ static void usage(const char* program)
     stderr,
     "usage: %s <matrix.mtx> [--gamma <value>] [--tolerance <value>] "
     "[--max-iterations <n>] [--max-passes <n>] [--repeat <n>] "
-    "[--output <path>] [--symmetric 0|1] [--weighted 0|1] [--verbose]\n",
+    "[--output <path>] [--symmetric 0|1(default=1)] [--weighted 0|1] [--verbose]\n",
     program);
 }
 
@@ -278,7 +271,7 @@ int main(int argc, char** argv)
   const char* file = argv[1];
   CPMLeidenOptions options;
   std::string output_path;
-  bool already_symmetric = false;
+  bool already_symmetric = true;
   bool weighted = false;
 
   for (int i = 2; i < argc; ++i) {

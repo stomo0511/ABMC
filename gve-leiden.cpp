@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
-#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -14,14 +13,8 @@
 #include "common/BlockIO.hpp"
 #include "common/Coloring.hpp"
 #include "common/mm_io.hpp"
+#include "common/Timer.hpp"
 #include "gve-leiden-inc/main.hxx"
-
-using Clock = std::chrono::steady_clock;
-
-static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
-{
-    return std::chrono::duration<double>(end - begin).count();
-}
 
 std::vector<int> relabel_dense(
     const std::vector<int>& comm,
@@ -118,12 +111,12 @@ Graph BuildBlockGraphFromGve(const GveGraph& graph, const std::vector<int>& bloc
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::fprintf(stderr, "usage: %s <matrix.mtx> [symmetric(0|1)] [weighted(0|1)]\n", argv[0]);
+        std::fprintf(stderr, "usage: %s <matrix.mtx> [symmetric(0|1, default=1)] [weighted(0|1)]\n", argv[0]);
         return 1;
     }
 
     const char* file = argv[1];
-    const bool already_symmetric = argc > 2 ? std::atoi(argv[2]) != 0 : false;
+    const bool already_symmetric = argc > 2 ? std::atoi(argv[2]) != 0 : true;
     const bool weighted = argc > 3 ? std::atoi(argv[3]) != 0 : false;
 
     std::ifstream in(file);
@@ -148,25 +141,13 @@ int main(int argc, char** argv) {
 
     DiGraph<K, None, V> graph;
     readMtxOmpW(graph, file, weighted);
-    if (!already_symmetric) {
+    if (!already_symmetric && !matrix_symmetric) {
         graph = symmetricizeOmp(graph);
     }
 
-    // std::cout << "rows = " << rows
-    //           << " cols = " << cols
-    //           << " nnz = " << nnz
-    //           << " matrix_symmetric = " << (matrix_symmetric ? 1 : 0) << "\n";
-    // std::cout << "graph_order = " << graph.order()
-    //           << " graph_size = " << graph.size()
-    //           << " graph_span = " << graph.span() << "\n";
-
     auto after_read_to_write_begin = Clock::now();
 
-    // auto leiden_begin = Clock::now();
     auto result = leidenStaticOmp(graph);
-    // auto leiden_end = Clock::now();
-    // std::cout << "time_leidenStaticOmp_sec = "
-    //           << elapsed_seconds(leiden_begin, leiden_end) << "\n";
 
     std::vector<int> block_of(rows, -1);
     for (size_t u = 0; u < rows; ++u) {
@@ -190,26 +171,18 @@ int main(int argc, char** argv) {
         if (size > max_community_size) max_community_size = size;
     }
 
-    // std::cout << "community_count = " << community_count
-    //           << " max_community_size = " << max_community_size
-    //           << " min_community_size = " << min_community_size << "\n";
-
     const double total_edge_weight = edgeWeightOmp(graph) / 2.0;
     const double modularity = total_edge_weight > 0.0
         ? modularityByOmp(graph, [&](K u) { return result.membership[u]; }, total_edge_weight)
         : 0.0;
 
-    // std::cout << "modularity = " << modularity << "\n";
-
-    // auto block_graph_begin = Clock::now();
     Graph block_graph = BuildBlockGraphFromGve(graph, dense, static_cast<int>(community_count));
-    // auto block_graph_end = Clock::now();
-    // std::cout << "time_BuildBlockGraphFromGve_sec = "
-    //           << elapsed_seconds(block_graph_begin, block_graph_end) << "\n";
 
     std::vector<int> block_color;
     const int color_count = Greedy_Coloring(block_graph, block_color);
     RelabelColorsByClassSize(block_color);
+
+    auto after_read_to_write_end = Clock::now();
 
     std::string stem = file_stem(file);
     stem += "_gveleiden";
@@ -218,11 +191,7 @@ int main(int argc, char** argv) {
 
     WriteBlockInfo_1Based(dense, blk_path);
     WriteBlockColor_1Based(block_color, color_count, bcol_path);
-    auto after_read_to_write_end = Clock::now();
 
-    // std::cout << "color_count = " << color_count << "\n"
-    //           << "blk_path = " << blk_path << "\n"
-    //           << "bcol_path = " << bcol_path << "\n";
     std::cout << "time = " << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end)
               << " NB = " << community_count
               << " NC = " << color_count

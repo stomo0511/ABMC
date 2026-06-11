@@ -36,6 +36,7 @@ else
 endif
 
 TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm
+HDRS := common/Timer.hpp
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -52,11 +53,11 @@ L2CPMOBJS := leiden_cpm.o
 
 GVESRCS := gve-leiden.cpp
 GVEOBJS := $(GVESRCS:.cpp=.o)
-GVEHDRS := $(wildcard gve-leiden-inc/*.hxx)
+GVEHDRS := $(wildcard gve-leiden-inc/*.hxx) common/Timer.hpp
 
 CPMSRCS := gve-leiden-cpm.cpp
 CPMOBJS := $(CPMSRCS:.cpp=.o)
-CPMHDRS := $(wildcard gve-leiden-inc/*.hxx) $(wildcard inc/*.hxx) common/Types.hpp
+CPMHDRS := $(wildcard gve-leiden-inc/*.hxx) $(wildcard inc/*.hxx) common/Types.hpp common/Timer.hpp
 
 GSRCS := gmc.cpp
 GOBJS := $(GSRCS:.cpp=.o)
@@ -119,7 +120,7 @@ rabbit.o: CXXFLAGS += -fopenmp
 gve-leiden.o: gve-leiden.cpp $(GVEHDRS)
 	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -c $< -o $@
 
-leiden_cpm.o: leiden.cpp
+leiden_cpm.o: leiden.cpp common/Timer.hpp
 	$(CXX) $(CXXFLAGS) -DCPM -c $< -o $@
 
 gve-leiden-cpm.o: gve-leiden-cpm.cpp $(CPMHDRS)

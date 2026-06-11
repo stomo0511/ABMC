@@ -1,20 +1,13 @@
 #include <queue>
 #include <algorithm>
-#include <chrono>
 #include <numeric>
 #include "common/Types.hpp"
 #include "common/mm_io.hpp"
 #include "common/Coloring.hpp"
 #include "common/BlockIO.hpp"
 #include "common/Block_Eval.hpp"
+#include "common/Timer.hpp"
 #include "abmc.hpp"
-
-using Clock = std::chrono::steady_clock;
-
-static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
-{
-    return std::chrono::duration<double>(end - begin).count();
-}
 
 // ブロック化（ポリシー選択あり）
 BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
@@ -205,6 +198,8 @@ int main(int argc, char** argv) {
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);
 
+    auto after_read_to_write_end = Clock::now();
+
     //////////////////////////////////////////////
     // デバッグ用出力
     // DumpBlockEdges(T);
@@ -223,7 +218,6 @@ int main(int argc, char** argv) {
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
-    auto after_read_to_write_end = Clock::now();
 
     // --- モジュラリティ（未加重）
     double Q = Modularity_Unweighted(G, part.block_of);
