@@ -1,5 +1,6 @@
 #include <queue>
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 #include "common/Types.hpp"
 #include "common/mm_io.hpp"
@@ -11,33 +12,32 @@ extern "C" {
     #include <igraph/igraph.h>
 }
 
+using Clock = std::chrono::steady_clock;
+
+static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
+{
+    return std::chrono::duration<double>(end - begin).count();
+}
+
 // Louvain法によるクラスタリング
 std::vector<int> Louvain_from_Boost(const Graph& G) {
-    igraph_rng_seed(igraph_rng_default(), 42u);  // 任意の固定シードで実行時の再現性を確保
+    igraph_rng_seed(igraph_rng_default(), 42u);
 
-    // 1) igraph を頂点数指定で初期化（無向）
     igraph_t ig;
     if (igraph_empty(&ig, static_cast<igraph_integer_t>(num_vertices(G)), IGRAPH_UNDIRECTED)) {
         throw std::runtime_error("igraph_empty failed");
     }
 
-    // 2) Boost.Graph の辺を igraph の edges ベクタ（u0, v0, u1, v1, ...）へ
     std::vector<igraph_integer_t> edge_list;
     edge_list.reserve(2 * num_edges(G));
+
     for (auto e : boost::make_iterator_range(edges(G))) {
         edge_list.push_back(static_cast<igraph_integer_t>(source(e, G)));
         edge_list.push_back(static_cast<igraph_integer_t>(target(e, G)));
     }
 
-    // 3) view（所有権なし）を作って add_edges
-    //    ※ 0.10系は「戻り値で view を返す」2引数API
-    std::vector<int> result(num_vertices(G), 0);
-
     int rc = IGRAPH_SUCCESS;
 
-    // igraph_vector_int_t edge_vec;
-    // igraph_vector_int_view(&edge_vec, edge_list.data(),
-    //                         static_cast<igraph_integer_t>(edge_list.size()));
     igraph_vector_int_t edge_vec =
         igraph_vector_int_view(
             edge_list.data(),
@@ -50,10 +50,12 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
             throw std::runtime_error("igraph_add_edges failed: " + std::to_string(rc));
     }
 
-    // 4) Louvain (multilevel) 実行
+    std::vector<int> result(num_vertices(G), 0);
+
     igraph_vector_int_t membership;
     igraph_matrix_int_t memberships;
     igraph_vector_t modularity;
+
     igraph_vector_int_init(&membership, 0);
     igraph_matrix_int_init(&memberships, 0, 0);
     igraph_vector_init(&modularity, 0);
@@ -61,15 +63,11 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     rc = igraph_community_multilevel(
         &ig, /*weights*/ nullptr, /*resolution*/ 1.0,
         &membership, &memberships, &modularity);
+
     if (rc != IGRAPH_SUCCESS) { throw std::runtime_error("community_multilevel failed"); }
 
     const igraph_integer_t levels = igraph_vector_size(&modularity);
     const igraph_integer_t comm_count = igraph_vector_int_max(&membership) + 1;
-
-    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
-    // std::cout << "communities: " << comm_count << "\n";
-    std::cout << "NB = " << comm_count;
-    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
 
     for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i)
         result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
@@ -77,8 +75,8 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     igraph_vector_int_destroy(&membership);
     igraph_matrix_int_destroy(&memberships);
     igraph_vector_destroy(&modularity);
-
     igraph_destroy(&ig);
+
     return result;
 }
 
@@ -137,56 +135,26 @@ int main(int argc, char** argv) {
 
     Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
 
-    std::vector<int> block_of = Louvain_from_Boost(G);
+    auto after_read_to_write_begin = Clock::now();
 
+    std::vector<int> block_of = Louvain_from_Boost(G);
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
-
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
     
     //////////////////////////////////////////////
     // ブロックグラフの作成
-    // Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
     Graph T = BuildBlockGraph(G, dense, BlockEdgeWeight::Binary);
 
     //////////////////////////////////////////////
     // ブロック内結合度の評価
-    // auto internal = CountInternalEdges(G, block_of, nb);
     auto internal = CountInternalEdges(G, dense, nb);
     double total_avg = 0.0;
+
     for (int b = 0; b < nb; ++b) {
         double avg_deg = (sizes[b] > 0) ? 2.0 * internal[b] / sizes[b] : 0.0;
         total_avg += avg_deg;
-        // std::cout << "Block " << b << ": nodes=" << sizes[b]
-        //           << ", internal_edges=" << internal[b]
-        //           << ", avg_deg=" << avg_deg << "\n";
     }
-    // std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
-
-    //////////////////////////////////////////////
-    // ブロック間結合度の評価
-    // ブロック間の複数エッジのエッジをカウントする場合
-    // Graph T_count = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Count);
-    // auto Tw = get(boost::edge_weight, T_count);
-    // for (auto eIt = edges(T_count); eIt.first != eIt.second; ++eIt.first) {
-    //     auto e = *eIt.first;
-    //     int bu = (int)source(e, T_count);
-    //     int bv = (int)target(e, T_count);
-    //     double w = Tw[e];
-    //     std::cout << "Block " << bu << " - Block " << bv
-    //               << ": inter_edges=" << w << "\n";
-    // }
-    // ブロック間の複数エッジを1本にカウントする場合
-    // Graph T_bin = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
-    // 各ブロックの次数を計算
-    total_avg = 0.0;
-    for (int b = 0; b < nb; ++b) {
-        int deg = boost::degree(b, T);
-        // std::cout << "Block " << b << ": degree=" << deg << "\n";
-        total_avg += deg;
-    }
-    // std::cout << "Block graph average degree: "
-    //           << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
@@ -196,6 +164,8 @@ int main(int argc, char** argv) {
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);
 
+    auto after_read_to_write_end = Clock::now();
+
     // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
     std::string stem = file_stem(argv[1]);
     stem += "_louvain";
@@ -203,16 +173,17 @@ int main(int argc, char** argv) {
     std::string bcol_path = stem + ".bcol";
 
     // ブロック情報データの出力
-    // WriteBlockInfo_1Based(block_of, blk_path);
     WriteBlockInfo_1Based(dense, blk_path);
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
-    std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
-    // double Q = Modularity_Unweighted(G, block_of);
     double Q = Modularity_Unweighted(G, dense);
-    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
+
+    std::cout << "time = " << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end)
+              << " NB = " << nb
+              << " NC = " << nc
+              << " modularity = " << Q << "\n";
     return 0;
 }

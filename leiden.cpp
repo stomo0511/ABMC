@@ -38,33 +38,25 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         edge_list.push_back(static_cast<igraph_integer_t>(target(e, G)));
     }
 
-    int rc = IGRAPH_SUCCESS;
-
-    igraph_vector_int_t edge_vec =
-        igraph_vector_int_view(
-            edge_list.data(),
-            static_cast<igraph_integer_t>(edge_list.size())
-        );
-
-    rc = igraph_add_edges(&ig, &edge_vec, nullptr);
+    igraph_vector_int_t edge_vec = igraph_vector_int_view(
+        edge_list.data(),
+        static_cast<igraph_integer_t>(edge_list.size())
+    );
+    int rc = igraph_add_edges(&ig, &edge_vec, nullptr);
 
     if (rc != IGRAPH_SUCCESS) {
         igraph_destroy(&ig);
         throw std::runtime_error("igraph_add_edges failed: " + std::to_string(rc));
     }
 
-    std::vector<int> result(num_vertices(G), 0);
-
     igraph_vector_int_t membership;
     igraph_vector_int_init(&membership, 0);
 
     igraph_int_t nb_clusters = 0;
-
     igraph_real_t quality = 0.0;
 
-    // auto igraph_leiden_begin = Clock::now();
-
-    // Modularity
+    ////////////////////////////////////////////////
+    // modularity
     rc = igraph_community_leiden_simple(
         &ig,
         /* weights */ nullptr,
@@ -77,9 +69,8 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         &nb_clusters,
         &quality
     );
-    // auto igraph_leiden_end = Clock::now();
-    // std::cout << " time_igraph_community_leiden_simple_sec = "
-    //           << elapsed_seconds(igraph_leiden_begin, igraph_leiden_end);
+
+    ////////////////////////////////////////////////
     // CPM
     // rc = igraph_community_leiden_simple(
     //     &ig,
@@ -88,7 +79,7 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
     //     /* resolution */ 1.0e-4,
     //     /* beta */ 0.01,
     //     /* start */ false,
-    //     /* n_iterations */ 5,
+    //     /* n_iterations */ 2,
     //     &membership,
     //     &nb_clusters,
     //     &quality
@@ -100,8 +91,7 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         throw std::runtime_error("community_leiden_simple failed: " + std::to_string(rc));
     }
 
-    // std::cout << "NB = " << nb_clusters;
-
+    std::vector<int> result(num_vertices(G), 0);
     for (igraph_integer_t i = 0; i < igraph_vector_int_size(&membership); ++i) {
         result[static_cast<size_t>(i)] =
             static_cast<int>(VECTOR(membership)[i]);
@@ -166,76 +156,34 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // auto read_begin = Clock::now();
     Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
-    // auto read_end = Clock::now();
-    // std::cout << "time_Read_MM_UD_sec = "
-    //           << elapsed_seconds(read_begin, read_end) << "\n";
 
     auto after_read_to_write_begin = Clock::now();
 
-    // auto leiden_begin = Clock::now();
     std::vector<int> block_of = Leiden_from_Boost(G);
-    // auto leiden_end = Clock::now();
-    // std::cout << " time_Leiden_from_Boost_sec = "
-    //           << elapsed_seconds(leiden_begin, leiden_end);
-
-    // auto relabel_begin = Clock::now();
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
-    // auto relabel_end = Clock::now();
-    // std::cout << " time_relabel_dense_sec = "
-    //           << elapsed_seconds(relabel_begin, relabel_end);
-
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
     
     //////////////////////////////////////////////
     // ブロックグラフの作成
-    // Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
-    // auto block_graph_begin = Clock::now();
     Graph T = BuildBlockGraph(G, dense, BlockEdgeWeight::Binary);
-    // auto block_graph_end = Clock::now();
-    // std::cout << " time_BuildBlockGraph_sec = "
-    //           << elapsed_seconds(block_graph_begin, block_graph_end);
 
     //////////////////////////////////////////////
     // ブロック内結合度の評価
-    // auto internal = CountInternalEdges(G, block_of, nb);
     auto internal = CountInternalEdges(G, dense, nb);
     double total_avg = 0.0;
+
     for (int b = 0; b < nb; ++b) {
         double avg_deg = (sizes[b] > 0) ? 2.0 * internal[b] / sizes[b] : 0.0;
         total_avg += avg_deg;
-        // std::cout << "Block " << b << ": nodes=" << sizes[b]
-        //           << ", internal_edges=" << internal[b]
-        //           << ", avg_deg=" << avg_deg << "\n";
     }
-    // std::cout << "Total average degree: " << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
-    //////////////////////////////////////////////
-    // ブロック間結合度の評価
-    // ブロック間の複数エッジのエッジをカウントする場合
-    // Graph T_count = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Count);
-    // auto Tw = get(boost::edge_weight, T_count);
-    // for (auto eIt = edges(T_count); eIt.first != eIt.second; ++eIt.first) {
-    //     auto e = *eIt.first;
-    //     int bu = (int)source(e, T_count);
-    //     int bv = (int)target(e, T_count);
-    //     double w = Tw[e];
-    //     std::cout << "Block " << bu << " - Block " << bv
-    //               << ": inter_edges=" << w << "\n";
-    // }
-    // ブロック間の複数エッジを1本にカウントする場合
-    // Graph T_bin = BuildBlockGraph(G, part.block_of, BlockEdgeWeight::Binary);
-    // 各ブロックの次数を計算
     total_avg = 0.0;
     for (int b = 0; b < nb; ++b) {
         int deg = boost::degree(b, T);
-        // std::cout << "Block " << b << ": degree=" << deg << "\n";
         total_avg += deg;
     }
-    // std::cout << "Block graph average degree: "
-    //           << (nb > 0 ? total_avg / nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
@@ -245,9 +193,8 @@ int main(int argc, char** argv) {
 
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);
-    // auto coloring_end = Clock::now();
-    // std::cout << " time_coloring_sec = "
-    //           << elapsed_seconds(coloring_begin, coloring_end);
+
+    auto after_read_to_write_end = Clock::now();
 
     // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
     std::string stem = file_stem(argv[1]);
@@ -256,24 +203,14 @@ int main(int argc, char** argv) {
     std::string bcol_path = stem + ".bcol";
 
     // ブロック情報データの出力
-    // WriteBlockInfo_1Based(block_of, blk_path);
-    // auto write_begin = Clock::now();
     WriteBlockInfo_1Based(dense, blk_path);
 
     // ブロック色情報データの出力
     WriteBlockColor_1Based(block_color, nc, bcol_path);
-    // auto write_end = Clock::now();
-    // std::cout << " time_write_blocks_sec = "
-    //           << elapsed_seconds(write_begin, write_end);
-    auto after_read_to_write_end = Clock::now();
-    // std::cout << "time_after_read_to_write_sec = "
-    //           << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end) << "\n";
-    // std::cout << " NC = " << nc << "\n";
 
     // --- モジュラリティ（未加重）
-    // double Q = Modularity_Unweighted(G, block_of);
     double Q = Modularity_Unweighted(G, dense);
-    // std::printf("Modularity (unweighted)   = %.6f\n", Q);
+
     std::cout << "time = " << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end)
               << " NB = " << nb
               << " NC = " << nc
