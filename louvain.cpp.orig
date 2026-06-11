@@ -11,6 +11,17 @@ extern "C" {
     #include <igraph/igraph.h>
 }
 
+// 0.10判定マクロ（0.9では未定義のことがあるので保険）
+#ifndef IGRAPH_VERSION_MAJOR
+#  define IGRAPH_VERSION_MAJOR 0
+#  define IGRAPH_VERSION_MINOR 9
+#endif
+#if (IGRAPH_VERSION_MAJOR > 0) || (IGRAPH_VERSION_MAJOR==0 && IGRAPH_VERSION_MINOR>=10)
+#  define IGRAPH_AT_LEAST_010 1
+#else
+#  define IGRAPH_AT_LEAST_010 0
+#endif
+
 // Louvain法によるクラスタリング
 std::vector<int> Louvain_from_Boost(const Graph& G) {
     igraph_rng_seed(igraph_rng_default(), 42u);  // 任意の固定シードで実行時の再現性を確保
@@ -35,6 +46,7 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
 
     int rc = IGRAPH_SUCCESS;
 
+#if IGRAPH_AT_LEAST_010
     // igraph_vector_int_t edge_vec;
     // igraph_vector_int_view(&edge_vec, edge_list.data(),
     //                         static_cast<igraph_integer_t>(edge_list.size()));
@@ -45,12 +57,23 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
         );
     rc = igraph_add_edges(&ig, &edge_vec, /*attr=*/nullptr);
 
+#else
+    igraph_vector_t evec;
+    igraph_vector_init(&evec, static_cast<long>(edge_list.size()));
+    for (long i = 0; i < static_cast<long>(edge_list.size()); ++i) {
+        VECTOR(evec)[i] = static_cast<igraph_real_t>(edge_list[i]);
+    }
+    rc = igraph_add_edges(&ig, &evec, /*attr=*/nullptr);
+    igraph_vector_destroy(&evec);
+#endif
+
     if (rc != IGRAPH_SUCCESS) {
             igraph_destroy(&ig);
             throw std::runtime_error("igraph_add_edges failed: " + std::to_string(rc));
-    }
+        }
 
     // 4) Louvain (multilevel) 実行
+#if IGRAPH_AT_LEAST_010
     igraph_vector_int_t membership;
     igraph_matrix_int_t memberships;
     igraph_vector_t modularity;
@@ -77,6 +100,36 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     igraph_vector_int_destroy(&membership);
     igraph_matrix_int_destroy(&memberships);
     igraph_vector_destroy(&modularity);
+
+#else
+    igraph_vector_t membership;   // 実数ベクタ（中身は整数ID）
+    igraph_matrix_t memberships;  // 実数行列（階層ごとの membership）
+    igraph_vector_t modularity;   // 実数ベクタ（階層ごとの Q）
+
+    igraph_vector_init(&membership, 0);
+    igraph_matrix_init(&memberships, 0, 0);
+    igraph_vector_init(&modularity, 0);
+
+    rc = igraph_community_multilevel(
+        &ig, /*weights*/ nullptr, /*resolution*/ 1.0,
+        &membership, &memberships, &modularity);
+    if (rc != IGRAPH_SUCCESS) { throw std::runtime_error("community_multilevel failed"); }
+
+    const long levels = igraph_vector_size(&modularity);
+    const long comm_count = static_cast<long>(igraph_vector_max(&membership)) + 1;
+
+    // std::cout << "vertices: " << igraph_vcount(&ig) << "\n";
+    // std::cout << "communities: " << comm_count << "\n";
+    std::cout << "NB = " << comm_count;
+    // std::cout << "final modularity: " << VECTOR(modularity)[levels - 1] << "\n";
+
+    for (long i = 0; i < igraph_vector_size(&membership); ++i)
+        result[static_cast<size_t>(i)] = static_cast<int>(VECTOR(membership)[i]);
+
+    igraph_vector_destroy(&membership);
+    igraph_matrix_destroy(&memberships);
+    igraph_vector_destroy(&modularity);
+#endif
 
     igraph_destroy(&ig);
     return result;
