@@ -35,7 +35,7 @@ else
 	GVE_OMP_LDFLAGS  = -fopenmp
 endif
 
-TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm
+TARGET = gmc abmc louvain leiden gve-leiden gve-leiden-cpm
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
@@ -48,7 +48,6 @@ LHDRS := $(LSRCS:.cpp=.hpp)
 L2SRCS := leiden.cpp
 L2OBJS := $(L2SRCS:.cpp=.o)
 L2HDRS := $(L2SRCS:.cpp=.hpp)
-L2CPMOBJS := leiden_cpm.o
 
 GVESRCS := gve-leiden.cpp
 GVEOBJS := $(GVESRCS:.cpp=.o)
@@ -89,9 +88,6 @@ louvain: $(LOBJS) $(COBJS)
 leiden: $(L2OBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
-leiden_cpm: $(L2CPMOBJS) $(COBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
-
 gve-leiden: $(GVEOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -o $@ $^ $(LDFLAGS) $(GVE_OMP_LDFLAGS)
 
@@ -119,9 +115,6 @@ rabbit.o: CXXFLAGS += -fopenmp
 gve-leiden.o: gve-leiden.cpp $(GVEHDRS)
 	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -c $< -o $@
 
-leiden_cpm.o: leiden.cpp
-	$(CXX) $(CXXFLAGS) -DCPM -c $< -o $@
-
 gve-leiden-cpm.o: gve-leiden-cpm.cpp $(CPMHDRS)
 	$(CXX) $(CXXFLAGS) -I. $(GVE_OMP_CXXFLAGS) -c $< -o $@
 
@@ -133,4 +126,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS)

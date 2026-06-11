@@ -1,6 +1,8 @@
 #include <queue>
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <cerrno>
 #include <numeric>
 #include "common/Types.hpp"
 #include "common/mm_io.hpp"
@@ -20,7 +22,7 @@ static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
 }
 
 // Leiden法によるクラスタリング
-std::vector<int> Leiden_from_Boost(const Graph& G) {
+std::vector<int> Leiden_from_Boost(const Graph& G, double resolution) {
     igraph_rng_seed(igraph_rng_default(), 42u);
 
     igraph_t ig;
@@ -55,13 +57,14 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
     igraph_int_t nb_clusters = 0;
     igraph_real_t quality = 0.0;
 
+#ifdef CPM
     ////////////////////////////////////////////////
-    // modularity
+    // CPM
     rc = igraph_community_leiden_simple(
         &ig,
         /* weights */ nullptr,
-        /* objective */ IGRAPH_LEIDEN_OBJECTIVE_MODULARITY,
-        /* resolution */ 1.0,
+        /* objective */ IGRAPH_LEIDEN_OBJECTIVE_CPM,
+        /* resolution */ resolution,
         /* beta */ 0.01,
         /* start */ false,
         /* n_iterations */ 2,
@@ -69,21 +72,22 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         &nb_clusters,
         &quality
     );
-
+#else
     ////////////////////////////////////////////////
-    // CPM
-    // rc = igraph_community_leiden_simple(
-    //     &ig,
-    //     /* weights */ nullptr,
-    //     /* objective */ IGRAPH_LEIDEN_OBJECTIVE_CPM,
-    //     /* resolution */ 1.0e-4,
-    //     /* beta */ 0.01,
-    //     /* start */ false,
-    //     /* n_iterations */ 2,
-    //     &membership,
-    //     &nb_clusters,
-    //     &quality
-    // );
+    // modularity
+    rc = igraph_community_leiden_simple(
+        &ig,
+        /* weights */ nullptr,
+        /* objective */ IGRAPH_LEIDEN_OBJECTIVE_MODULARITY,
+        /* resolution */ resolution,
+        /* beta */ 0.01,
+        /* start */ false,
+        /* n_iterations */ 2,
+        &membership,
+        &nb_clusters,
+        &quality
+    );
+#endif
 
     if (rc != IGRAPH_SUCCESS) {
         igraph_vector_int_destroy(&membership);
@@ -151,16 +155,24 @@ std::vector<int> relabel_dense(
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        std::fprintf(stderr, "usage: %s <matrix.mtx>\n", argv[0]);
+    if (argc != 3) {
+        std::fprintf(stderr, "usage: %s <resolution> <matrix.mtx>\n", argv[0]);
         return 1;
     }
 
-    Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
+    char* end = nullptr;
+    errno = 0;
+    double resolution = std::strtod(argv[1], &end);
+    if (errno != 0 || end == argv[1] || *end != '\0') {
+        std::fprintf(stderr, "invalid resolution: %s\n", argv[1]);
+        return 1;
+    }
+
+    Graph G = Read_MM_UD(argv[2]);    // 疎行列の隣接グラフ（無向グラフ）
 
     auto after_read_to_write_begin = Clock::now();
 
-    std::vector<int> block_of = Leiden_from_Boost(G);
+    std::vector<int> block_of = Leiden_from_Boost(G, resolution);
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
@@ -197,8 +209,12 @@ int main(int argc, char** argv) {
     auto after_read_to_write_end = Clock::now();
 
     // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
-    std::string stem = file_stem(argv[1]);
+    std::string stem = file_stem(argv[2]);
+#ifdef CPM
+    stem += "_leiden_cpm";
+#else
     stem += "_leiden";
+#endif
     std::string blk_path  = stem + ".blk";
     std::string bcol_path = stem + ".bcol";
 
