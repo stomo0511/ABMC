@@ -12,6 +12,33 @@ extern "C" {
     #include <igraph/igraph.h>
 }
 
+#ifndef IGRAPH_VERSION_MAJOR
+#  define IGRAPH_VERSION_MAJOR 0
+#  define IGRAPH_VERSION_MINOR 9
+#  define IGRAPH_VERSION_PATCH 0
+#endif
+
+#if (IGRAPH_VERSION_MAJOR >= 1)
+#  define IGRAPH_AT_LEAST_100 1
+#else
+#  define IGRAPH_AT_LEAST_100 0
+#endif
+
+#if (IGRAPH_VERSION_MAJOR > 0) || \
+    (IGRAPH_VERSION_MAJOR == 0 && IGRAPH_VERSION_MINOR >= 10)
+#  define IGRAPH_AT_LEAST_010 1
+#else
+#  define IGRAPH_AT_LEAST_010 0
+#endif
+
+#if (IGRAPH_VERSION_MAJOR > 0) || \
+    (IGRAPH_VERSION_MAJOR == 0 && IGRAPH_VERSION_MINOR > 10) || \
+    (IGRAPH_VERSION_MAJOR == 0 && IGRAPH_VERSION_MINOR == 10 && IGRAPH_VERSION_PATCH >= 17)
+#  define IGRAPH_HAS_LEIDEN_SIMPLE 1
+#else
+#  define IGRAPH_HAS_LEIDEN_SIMPLE 0
+#endif
+
 using Clock = std::chrono::steady_clock;
 
 static double elapsed_seconds(Clock::time_point begin, Clock::time_point end)
@@ -40,6 +67,7 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
 
     int rc = IGRAPH_SUCCESS;
 
+#if IGRAPH_AT_LEAST_010
     igraph_vector_int_t edge_vec =
         igraph_vector_int_view(
             edge_list.data(),
@@ -47,18 +75,29 @@ std::vector<int> Leiden_from_Boost(const Graph& G) {
         );
 
     rc = igraph_add_edges(&ig, &edge_vec, nullptr);
+#else
+#   error "Leiden requires igraph 0.10 or later"
+#endif
 
     if (rc != IGRAPH_SUCCESS) {
         igraph_destroy(&ig);
         throw std::runtime_error("igraph_add_edges failed: " + std::to_string(rc));
     }
 
+#if !IGRAPH_HAS_LEIDEN_SIMPLE
+#   error "igraph_community_leiden_simple requires igraph 0.10.17 or later"
+#endif
+
     std::vector<int> result(num_vertices(G), 0);
 
     igraph_vector_int_t membership;
     igraph_vector_int_init(&membership, 0);
 
+#if IGRAPH_AT_LEAST_100
     igraph_int_t nb_clusters = 0;
+#else
+    igraph_integer_t nb_clusters = 0;
+#endif
 
     igraph_real_t quality = 0.0;
 
