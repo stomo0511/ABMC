@@ -98,3 +98,43 @@ Graph BuildBlockGraph(const Graph& G,
     }
     return T;
 }
+
+/**
+ * .blk ファイル（1-based）を読み込み、0-based の vector に変換する
+ */
+int ReadBlockInfo_1Based(const std::string& path, int N, std::vector<int>& block_of) {
+    std::ifstream fin(path);
+    if (!fin) throw std::runtime_error("Cannot open block file: " + path);
+
+    int nb;
+    fin >> nb; // 1行目: ブロック数
+    block_of.assign(N, -1);
+
+    int u_raw, b_raw;
+    while (fin >> u_raw >> b_raw) {
+        int u = u_raw - 1; // 1-based -> 0-based
+        int b = b_raw - 1;
+        if (u >= 0 && u < N) block_of[u] = b;
+    }
+    return nb;
+}
+
+/**
+ * .bcol ファイル（1-based）を読み込み、0-based の vector に変換する
+ */
+int ReadBlockColor_1Based(const std::string& path, int nb, std::vector<int>& block_color) {
+    std::ifstream fin(path);
+    if (!fin) throw std::runtime_error("Cannot open color file: " + path);
+
+    int nc;
+    fin >> nc; // 1行目: 彩色数
+    block_color.assign(nb, -1);
+
+    int b_raw, c_raw;
+    while (fin >> b_raw >> c_raw) {
+        int b = b_raw - 1; // 1-based -> 0-based
+        int c = c_raw - 1;
+        if (b >= 0 && b < nb) block_color[b] = c;
+    }
+    return nc;
+}

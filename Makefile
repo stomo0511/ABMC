@@ -35,7 +35,7 @@ else
 	GVE_OMP_LDFLAGS  = -fopenmp
 endif
 
-TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm
+TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock
 HDRS := common/Timer.hpp
 
 ASRCS := abmc.cpp
@@ -78,6 +78,9 @@ MHDRS := $(MSRCS:.cpp=.hpp)
 CSRCS := common/mm_io.cpp common/Coloring.cpp common/BlockIO.cpp
 COBJS := $(CSRCS:.cpp=.o)
 CHDRS := $(CSRCS:.cpp=.hpp)
+
+ESRCS := eblock.cpp
+EOBJS := $(ESRCS:.cpp=.o)
 
 all: $(TARGET)
 
@@ -126,6 +129,9 @@ leiden_cpm.o: leiden.cpp common/Timer.hpp
 gve-leiden-cpm.o: gve-leiden-cpm.cpp $(CPMHDRS)
 	$(CXX) $(CXXFLAGS) -I. $(GVE_OMP_CXXFLAGS) -c $< -o $@
 
+eblock: $(EOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
 common/%.o: common/%.cpp $(CHDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -134,4 +140,4 @@ install: $(TARGET)
 	install -m 755 $(TARGET) $(HOME)/.local/bin/
 
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS) $(EOBJS)
