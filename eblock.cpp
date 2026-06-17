@@ -7,7 +7,7 @@
 
 #include "common/Types.hpp"
 #include "common/mm_io.hpp"
-// #include "common/BlockIO.hpp"
+#include "common/BlockIO.hpp"
 #include "common/Block_Eval.hpp"
 // #include "abmc.hpp"
 
@@ -205,11 +205,78 @@ void EvaluateLoadBalance(
 }
 
 /**
+ * 各色に属するブロック数と総ノード数を評価する。
+ *
+ * nodes_per_block[b] : ブロック b に含まれるノード数
+ * block_color[b]     : ブロック b の色番号（0-based）
+ * nc                 : 色数
+ */
+void EvaluateColorStatistics(
+    const std::vector<int>& nodes_per_block,
+    const std::vector<int>& block_color,
+    int nc)
+{
+    std::vector<int> blocks_per_color(nc, 0);
+    std::vector<int> nodes_per_color(nc, 0);
+
+    int nb = static_cast<int>(nodes_per_block.size());
+
+    for(int b = 0; b < nb; ++b){
+
+        int c = block_color[b];
+
+        if(c < 0 || c >= nc){
+            std::cerr
+                << "Invalid color index: block "
+                << b + 1
+                << ", color = "
+                << c + 1
+                << std::endl;
+            continue;
+        }
+
+        blocks_per_color[c]++;
+        nodes_per_color[c] += nodes_per_block[b];
+    }
+
+    std::cout << "\n6. Color Statistics" << std::endl;
+    std::cout << "   Color"
+              << "   Blocks"
+              << "   Nodes"
+              << "   AvgNodesPerBlock"
+              << std::endl;
+
+    for(int c = 0; c < nc; ++c){
+
+        double avg_nodes = 0.0;
+
+        if(blocks_per_color[c] > 0){
+            avg_nodes =
+                static_cast<double>(nodes_per_color[c])
+                / blocks_per_color[c];
+        }
+
+        std::cout << "   "
+                  << std::setw(5) << c + 1
+                  << "   "
+                  << std::setw(6) << blocks_per_color[c]
+                  << "   "
+                  << std::setw(5) << nodes_per_color[c]
+                  << "   "
+                  << std::setw(16)
+                  << std::fixed << std::setprecision(2)
+                  << avg_nodes
+                  << std::endl;
+    }
+}
+
+/**
  * ブロックの品質を多角的に評価する
  */
 void EvaluatePartitioning(
     const Graph& G,
     const std::vector<int>& block_of,
+    const std::vector<int>& block_color,
     int nb,
     int nc)
 {
@@ -327,6 +394,7 @@ void EvaluatePartitioning(
     EvaluateBlockGraph(T);
     EvaluateLocalityScore(G, block_of);
     EvaluateLoadBalance(nodes_per_block);
+    EvaluateColorStatistics(nodes_per_block, block_color, nc);
 }
 
 int main(int argc, char** argv)
@@ -355,7 +423,7 @@ int main(int argc, char** argv)
     int nc = ReadBlockColor_1Based(argv[3], nb, block_color);
 
     // 評価の実行
-    EvaluatePartitioning(G, block_of, nb, nc);
+    EvaluatePartitioning(G, block_of, block_color, nb, nc);
 
     return 0;
 }
