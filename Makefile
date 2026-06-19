@@ -1,22 +1,11 @@
 CXX = g++
-# CXXFLAGS = -g -O0 -std=c++17
-# CXXFLAGS = -O3 -ffast-math -march=native -std=c++17
 CXXFLAGS = -O3 -march=native -std=c++17
-# CXXFLAGS = -Wall -Wextra -Wcast-align -Wcast-qual -Wconversion -Wfloat-equal \
-# 	    -Wformat=2 -Winit-self -Wmissing-declarations \
-# 	    -Wmissing-include-dirs -Wpointer-arith -Wredundant-decls \
-# 	    -Wswitch-default -Wuninitialized -Wwrite-strings \
-# 	    -Wno-sign-conversion -Wno-unused-function \
-#         -Wno-missing-declarations \
-#         -std=c++14 -mcx16 -O3 -DNDEBUG
-# LDFLAGS = -lboost_system -lboost_filesystem -lboost_iostreams -ligraph
 
 UNAME = $(shell uname)
 ifeq ($(UNAME), Darwin)
 	BREW_INCDIR = /opt/homebrew/include
 	BREW_LIBDIR = /opt/homebrew/lib
 	CXXFLAGS := -I$(BREW_INCDIR) $(CXXFLAGS)
-# 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
 	LDFLAGS := -L$(BREW_LIBDIR) -ligraph
 endif
 
@@ -25,7 +14,6 @@ ifeq ($(UNAME), Linux)
 	IGP_INCDIR = /opt/igraph-1.0.1/include
 	IGP_LIBDIR = /opt/igraph-1.0.1/lib
 	CXXFLAGS := -I$(IGP_INCDIR) $(CXXFLAGS)
-# 	LDFLAGS := -L$(IGP_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph -lopenblas
 	LDFLAGS := -L$(IGP_LIBDIR) -ligraph -lopenblas
 endif
 
@@ -39,7 +27,7 @@ else
 	RABBIT_EXTRA_LDFLAGS = -ltcmalloc_minimal -lnuma
 endif
 
-TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock rcm
+TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock
 HDRS := common/Timer.hpp
 
 ASRCS := abmc.cpp
