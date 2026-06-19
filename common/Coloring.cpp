@@ -8,26 +8,18 @@
 // 彩色方針は「次数降順＋ID昇順タイブレーク」
 int Greedy_Coloring(const Graph& G, std::vector<int>& color)
 {
-    using boost::num_vertices;
-    using boost::degree;
-    using boost::adjacent_vertices;
-    using boost::graph_traits;
-
-    const std::size_t N = num_vertices(G);
+    const std::size_t N = G.n;
     color.assign(N, -1); // -1: uncolored
 
-    using Vertex = graph_traits<Graph>::vertex_descriptor;
-    using AdjacencyIter = graph_traits<Graph>::adjacency_iterator;
-
     struct VertexDegree {
-        Vertex v;
+        int v;
         std::size_t deg;
     };
 
     std::vector<VertexDegree> order;
     order.reserve(N);
-    for (Vertex v = 0; v < N; ++v) {
-        order.push_back({v, degree(v, G)});
+    for (int v = 0; v < static_cast<int>(N); ++v) {
+        order.push_back({v, G.adj[v].size()});
     }
 
     // 次数降順、同次数ならID昇順
@@ -43,12 +35,11 @@ int Greedy_Coloring(const Graph& G, std::vector<int>& color)
     int max_color = -1;
 
     for (const auto& vd : order) {
-        Vertex u = vd.v;
+        int u = vd.v;
         ++stamp;
 
-        AdjacencyIter ai, ai_end;
-        for (boost::tie(ai, ai_end) = adjacent_vertices(u, G); ai != ai_end; ++ai) {
-            int c = color[*ai];
+        for (const auto& e : G.adj[u]) {
+            int c = color[e.to];
             if (c >= 0) mark[c] = stamp;
         }
 

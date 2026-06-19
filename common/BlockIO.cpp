@@ -52,7 +52,6 @@ Graph BuildBlockGraph(const Graph& G,
 {
     const int nb = *std::max_element(block_of.begin(), block_of.end()) + 1;
     Graph T(nb);
-    auto Tw = get(boost::edge_weight, T);
 
     // 集計用: (min(bk,bl), max(bk,bl)) -> weight
     struct PairHash {
@@ -63,21 +62,17 @@ Graph BuildBlockGraph(const Graph& G,
     std::unordered_map<std::pair<int,int>, double, PairHash> agg;
     agg.reserve(num_edges(G));
 
-    auto Gw = get(boost::edge_weight, G);
-    for (auto eIt = edges(G); eIt.first != eIt.second; ++eIt.first) {
-        auto e = *eIt.first;
-        int u = (int)source(e, G);
-        int v = (int)target(e, G);
+    for_each_undirected_edge(G, [&](int u, int v, double w) {
         int bk = block_of[u];
         int bl = block_of[v];
-        if (bk == bl) continue;
+        if (bk == bl) return;
         if (bk > bl) std::swap(bk, bl);
 
         double inc = 0.0;
         switch (mode) {
             case BlockEdgeWeight::Binary: inc = 1.0; break;
             case BlockEdgeWeight::Count:  inc = 1.0; break;
-            case BlockEdgeWeight::AbsSum: inc = std::abs(get(Gw, e)); break;
+            case BlockEdgeWeight::AbsSum: inc = std::abs(w); break;
         }
         auto key = std::make_pair(bk, bl);
         if (mode == BlockEdgeWeight::Binary) {
@@ -87,14 +82,13 @@ Graph BuildBlockGraph(const Graph& G,
         } else {
             agg[key] += inc;
         }
-    }
+    });
 
     // 集計結果を T に反映
     for (const auto& kv : agg) {
         int bk = kv.first.first;
         int bl = kv.first.second;
-        auto et = add_edge(bk, bl, T).first;
-        Tw[et] = (mode == BlockEdgeWeight::Binary) ? 1.0 : kv.second;
+        add_undirected_edge(T, bk, bl, (mode == BlockEdgeWeight::Binary) ? 1.0 : kv.second);
     }
     return T;
 }

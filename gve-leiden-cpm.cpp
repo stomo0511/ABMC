@@ -163,12 +163,10 @@ static Graph build_block_graph_from_gve(
   });
 
   Graph block_graph(block_count);
-  auto weights = get(boost::edge_weight, block_graph);
   for (const std::uint64_t key : block_edges) {
     const int bu = static_cast<int>(key >> 32);
     const int bv = static_cast<int>(key & 0xffffffffu);
-    auto edge = add_edge(bu, bv, block_graph).first;
-    weights[edge] = 1.0;
+    add_undirected_edge(block_graph, bu, bv, 1.0);
   }
 
   return block_graph;
@@ -176,20 +174,18 @@ static Graph build_block_graph_from_gve(
 
 static int greedy_coloring(const Graph& graph, std::vector<int>& color)
 {
-  using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
-
   struct VertexDegree {
-    Vertex vertex;
+    int vertex;
     std::size_t degree;
   };
 
-  const std::size_t n = boost::num_vertices(graph);
+  const std::size_t n = graph.n;
   color.assign(n, -1);
 
   std::vector<VertexDegree> order;
   order.reserve(n);
-  for (Vertex v = 0; v < n; ++v) {
-    order.push_back({v, boost::degree(v, graph)});
+  for (int v = 0; v < static_cast<int>(n); ++v) {
+    order.push_back({v, graph.adj[v].size()});
   }
 
   std::sort(order.begin(), order.end(), [](const VertexDegree& a, const VertexDegree& b) {
@@ -202,12 +198,11 @@ static int greedy_coloring(const Graph& graph, std::vector<int>& color)
   int max_color = -1;
 
   for (const auto& item : order) {
-    const Vertex u = item.vertex;
+    const int u = item.vertex;
     ++stamp;
 
-    auto adjacent = boost::adjacent_vertices(u, graph);
-    for (auto it = adjacent.first; it != adjacent.second; ++it) {
-      const int c = color[*it];
+    for (const auto& e : graph.adj[u]) {
+      const int c = color[e.to];
       if (c >= 0) mark[c] = stamp;
     }
 

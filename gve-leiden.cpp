@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -99,12 +100,10 @@ Graph BuildBlockGraphFromGve(const GveGraph& graph, const std::vector<int>& bloc
     });
 
     Graph block_graph(nb);
-    auto weights = get(boost::edge_weight, block_graph);
     for (uint64_t key : block_edges) {
         const int bu = static_cast<int>(key >> 32);
         const int bv = static_cast<int>(key & 0xffffffffu);
-        auto edge = add_edge(bu, bv, block_graph).first;
-        weights[edge] = 1.0;
+        add_undirected_edge(block_graph, bu, bv, 1.0);
     }
     return block_graph;
 }

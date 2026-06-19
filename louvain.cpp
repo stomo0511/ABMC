@@ -13,7 +13,7 @@ extern "C" {
 }
 
 // Louvain法によるクラスタリング
-std::vector<int> Louvain_from_Boost(const Graph& G) {
+std::vector<int> Louvain_from_Graph(const Graph& G) {
     igraph_rng_seed(igraph_rng_default(), 42u);
 
     igraph_t ig;
@@ -24,10 +24,10 @@ std::vector<int> Louvain_from_Boost(const Graph& G) {
     std::vector<igraph_integer_t> edge_list;
     edge_list.reserve(2 * num_edges(G));
 
-    for (auto e : boost::make_iterator_range(edges(G))) {
-        edge_list.push_back(static_cast<igraph_integer_t>(source(e, G)));
-        edge_list.push_back(static_cast<igraph_integer_t>(target(e, G)));
-    }
+    for_each_undirected_edge(G, [&](int u, int v, double) {
+        edge_list.push_back(static_cast<igraph_integer_t>(u));
+        edge_list.push_back(static_cast<igraph_integer_t>(v));
+    });
 
     int rc = IGRAPH_SUCCESS;
 
@@ -130,7 +130,7 @@ int main(int argc, char** argv) {
 
     auto after_read_to_write_begin = Clock::now();
 
-    std::vector<int> block_of = Louvain_from_Boost(G);
+    std::vector<int> block_of = Louvain_from_Graph(G);
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
     int nb = sizes.size();   // コミュニティの数（= ブロック数）

@@ -45,7 +45,7 @@ using namespace rabbit_order::aux;
 class RabbitReorder {
 public:
     explicit RabbitReorder(const Graph& G)
-        : G_(G), N_(static_cast<int>(boost::num_vertices(G))) {}
+        : G_(G), N_(G.n) {}
 
     std::vector<int> run() {
         // Step 1: Rabbit Order 用の隣接リスト作成 (重みの絶対値化)
@@ -64,14 +64,12 @@ private:
 
     // Rabbit Order 入力形式への変換 (符号反転による Assertion 回避)
     std::vector<std::vector<edge>> convert_to_rabbit_adj() {
-        auto weightmap = boost::get(boost::edge_weight, G_);
         std::vector<std::vector<edge>> adj(N_);
 
         for (int u = 0; u < N_; ++u) {
-            boost::graph_traits<Graph>::out_edge_iterator ei, ei_end;
-            for (boost::tie(ei, ei_end) = boost::out_edges(u, G_); ei != ei_end; ++ei) {
-                int v = (int)boost::target(*ei, G_);
-                float weight = std::abs(static_cast<float>(weightmap[*ei]));
+            for (const auto& e : G_.adj[u]) {
+                int v = e.to;
+                float weight = std::abs(static_cast<float>(e.weight));
                 adj[u].push_back({static_cast<vint>(v), weight});
             }
         }

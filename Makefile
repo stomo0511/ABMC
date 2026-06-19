@@ -30,12 +30,14 @@ endif
 ifeq ($(UNAME), Darwin)
 	GVE_OMP_CXXFLAGS = -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
 	GVE_OMP_LDFLAGS  = -L/opt/homebrew/opt/libomp/lib -lomp
+	RABBIT_EXTRA_LDFLAGS =
 else
 	GVE_OMP_CXXFLAGS = -fopenmp
 	GVE_OMP_LDFLAGS  = -fopenmp
+	RABBIT_EXTRA_LDFLAGS = -ltcmalloc_minimal -lnuma
 endif
 
-TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock
+TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock rcm
 HDRS := common/Timer.hpp
 
 ASRCS := abmc.cpp
@@ -106,10 +108,10 @@ gmc: $(GOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 rabmc: $(ROBJS) $(COBJS)
-	$(CXX) $(CXXFLAGS) -fopenmp -o $@ $^ $(LDFLAGS) -ltcmalloc_minimal -lnuma
+	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -o $@ $^ $(LDFLAGS) $(GVE_OMP_LDFLAGS) $(RABBIT_EXTRA_LDFLAGS)
 
 rabbit: $(BOBJS) $(COBJS)
-	$(CXX) $(CXXFLAGS) -fopenmp -o $@ $^ $(LDFLAGS) -ltcmalloc_minimal -lnuma
+	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -o $@ $^ $(LDFLAGS) $(GVE_OMP_LDFLAGS) $(RABBIT_EXTRA_LDFLAGS)
 
 rcm: $(MOBJS) $(COBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
@@ -117,8 +119,8 @@ rcm: $(MOBJS) $(COBJS)
 %.o: %.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-rabmc.o: CXXFLAGS += -fopenmp
-rabbit.o: CXXFLAGS += -fopenmp
+rabmc.o: CXXFLAGS += $(GVE_OMP_CXXFLAGS)
+rabbit.o: CXXFLAGS += $(GVE_OMP_CXXFLAGS)
 
 gve-leiden.o: gve-leiden.cpp $(GVEHDRS)
 	$(CXX) $(CXXFLAGS) $(GVE_OMP_CXXFLAGS) -c $< -o $@

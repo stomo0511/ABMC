@@ -13,8 +13,8 @@ int main(int argc, char** argv) {
     }
 
     Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
-    int N = boost::num_vertices(G);   // ノード数
-    int E = boost::num_edges(G);      // エッジ数
+    int N = num_vertices(G);          // ノード数
+    int E = static_cast<int>(num_edges(G)); // エッジ数
 
     // std::cout << "N = " << N << ", E = " << E << "\n";
 

@@ -15,7 +15,7 @@ extern "C" {
 }
 
 // Leiden法によるクラスタリング
-std::vector<int> Leiden_from_Boost(const Graph& G, double resolution) {
+std::vector<int> Leiden_from_Graph(const Graph& G, double resolution) {
     igraph_rng_seed(igraph_rng_default(), 42u);
 
     igraph_t ig;
@@ -28,10 +28,10 @@ std::vector<int> Leiden_from_Boost(const Graph& G, double resolution) {
     std::vector<igraph_integer_t> edge_list;
     edge_list.reserve(2 * num_edges(G));
 
-    for (auto e : boost::make_iterator_range(edges(G))) {
-        edge_list.push_back(static_cast<igraph_integer_t>(source(e, G)));
-        edge_list.push_back(static_cast<igraph_integer_t>(target(e, G)));
-    }
+    for_each_undirected_edge(G, [&](int u, int v, double) {
+        edge_list.push_back(static_cast<igraph_integer_t>(u));
+        edge_list.push_back(static_cast<igraph_integer_t>(v));
+    });
 
     igraph_vector_int_t edge_vec = igraph_vector_int_view(
         edge_list.data(),
@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
 
     auto after_read_to_write_begin = Clock::now();
 
-    std::vector<int> block_of = Leiden_from_Boost(G, resolution);
+    std::vector<int> block_of = Leiden_from_Graph(G, resolution);
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
@@ -186,7 +186,7 @@ int main(int argc, char** argv) {
 
     total_avg = 0.0;
     for (int b = 0; b < nb; ++b) {
-        int deg = boost::degree(b, T);
+        int deg = static_cast<int>(degree(b, T));
         total_avg += deg;
     }
 

@@ -25,15 +25,12 @@ void DumpBlocks(const BlockPartition& part)
 void DumpBlockEdges(const Graph& T)
 {
     std::printf("==== Block edges (undirected) ====\n");
-    auto Tw = get(boost::edge_weight, T);
     // 収まりが良いように (min,max) で整列
     std::vector<std::tuple<int,int,double>> E;
-    for (auto it = edges(T); it.first != it.second; ++it.first) {
-        auto e = *it.first;
-        int a = (int)source(e, T), b = (int)target(e, T);
+    for_each_undirected_edge(T, [&](int a, int b, double w) {
         if (a > b) std::swap(a, b);
-        E.emplace_back(a, b, get(Tw, e));
-    }
+        E.emplace_back(a, b, w);
+    });
     std::sort(E.begin(), E.end());
     for (auto& [a,b,w] : E)
         std::printf("(%d, %d)  w=%.12g\n", a, b, w);
@@ -43,18 +40,12 @@ void DumpBlockEdges(const Graph& T)
 void DumpBlockAdjacency(const Graph& T)
 {
     std::printf("==== Block adjacency lists ====\n");
-    auto Tw = get(boost::edge_weight, T);
     int nb = (int)num_vertices(T);
     for (int k = 0; k < nb; ++k) {
         std::printf("Bk %d:", k);
-        auto adj = boost::adjacent_vertices(k, T);
-        for (auto it = adj.first; it != adj.second; ++it) {
-            int l = (int)*it;
-            auto ep = edge(k, l, T);
-            double w = ep.second ? get(Tw, ep.first) : 0.0;
-            std::printf(" %d(w=%.12g)", l, w);
+        for (const auto& e : T.adj[k]) {
+            std::printf(" %d(w=%.12g)", e.to, e.weight);
         }
         std::printf("\n");
     }
 }
-

@@ -12,7 +12,7 @@
 // ブロック化（ポリシー選択あり）
 BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
 {
-    const int N = (int)boost::num_vertices(G);
+    const int N = G.n;
     if (N == 0) return {};
     if (block_size < 1) block_size = 1;
 
@@ -20,9 +20,6 @@ BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
     out.n = N;
     out.s = block_size;
     out.block_of.assign(N, -1);
-
-    // WeightMap wmap = get(boost::edge_weight, G);
-    auto wmap = get(boost::edge_weight, G);
 
     int assigned = 0;
     while (assigned < N) {
@@ -45,9 +42,8 @@ BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
             ++assigned;
 
             // C ← C ∪ adj(v) （未割当のみ追加）:contentReference[oaicite:5]{index=5}
-            auto nbrs = boost::adjacent_vertices(v, G);
-            for (AdjacencyIter it = nbrs.first; it != nbrs.second; ++it) {
-                int u = (int)*it;
+            for (const auto& e : G.adj[v]) {
+                int u = e.to;
                 if (out.block_of[u] == -1 && !in_cand[u]) {
                     in_cand[u] = 1;
                     cand.push_back(u);
@@ -90,9 +86,8 @@ BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
                     if (out.block_of[v] != -1) continue;
 
                     double score = 0.0;
-                    auto nbrs = boost::adjacent_vertices(v, G);
-                    for (AdjacencyIter it = nbrs.first; it != nbrs.second; ++it) {
-                        int u = (int)*it;
+                    for (const auto& e : G.adj[v]) {
+                        int u = e.to;
                         if (!in_block[u]) continue;
 
                         if (policy == BlockPolicy::MaxEdges) {
@@ -100,13 +95,7 @@ BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
                             score += 1.0;
                         } else {
                             // Weighted: Σ_{u∈Vk} |a_{vu}| を近似（無向1本をそのまま利用）:contentReference[oaicite:10]{index=10}
-                            auto ep = boost::edge(v, u, G);
-                            if (ep.second) {
-                                double w = std::abs(get(wmap, ep.first));
-                                score += w;
-                            } else {
-                                // (グラフが無向であれば通常到達する)
-                            }
+                            score += std::abs(e.weight);
                         }
                     }
                     if (score > best || (score == best && v < best_idx)) {
@@ -184,7 +173,7 @@ int main(int argc, char** argv) {
 
     total_avg = 0.0;
     for (int b = 0; b < part.nb; ++b) {
-        int deg = boost::degree(b, T);
+        int deg = static_cast<int>(degree(b, T));
         total_avg += deg;
     }
     // std::cout << "Block graph average degree: "

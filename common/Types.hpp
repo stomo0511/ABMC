@@ -1,38 +1,75 @@
 #pragma once
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graph_traits.hpp>
-#include <boost/graph/properties.hpp>
 
-// 無向グラフ + エッジに weight プロパティを持つ
-// typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS,
-//                   boost::no_property,
-//                   boost::property<boost::edge_weight_t, double>> Graph;
-// typedef boost::graph_traits<Graph>::edge_descriptor EdgeIterator;
-// typedef boost::graph_traits<Graph>::vertex_descriptor Vertex;
-// typedef boost::graph_traits<Graph>::adjacency_iterator AdjacencyIter;
+#include <cstddef>
+#include <vector>
 
-// typedef boost::property_map<Graph, boost::edge_weight_t>::type WeightMap;
+struct Edge {
+    int to;
+    double weight;
+};
+
+struct SimpleGraph {
+    int n = 0;
+    std::vector<std::vector<Edge>> adj;
+
+    SimpleGraph() = default;
+    explicit SimpleGraph(int n_) : n(n_), adj(n_) {}
+};
+
+using Graph = SimpleGraph;
+using Vertex = int;
 
 // Block graph T を作る（binary/count/abs-sum を選べる）
 enum class BlockEdgeWeight { Binary, Count, AbsSum };
 
-// エッジのプロパティ：重み
-using EdgeWeightProperty = boost::property<boost::edge_weight_t, double>;
+inline Graph MakeGraph(int n)
+{
+    return Graph(n);
+}
 
-// 無向グラフ（隣接リスト表現）
-using Graph = boost::adjacency_list<
-    boost::vecS,          // 頂点コンテナ
-    boost::vecS,          // エッジコンテナ
-    boost::undirectedS,   // 無向グラフ
-    boost::no_property,   // 頂点プロパティなし
-    EdgeWeightProperty    // エッジプロパティ
->;
+inline int num_vertices(const Graph& G)
+{
+    return G.n;
+}
 
-// エッジ重みアクセス用マップ
-using WeightMap = boost::property_map<Graph, boost::edge_weight_t>::type;
+inline std::size_t degree(int u, const Graph& G)
+{
+    return G.adj[u].size();
+}
 
-// グラフ関連の便利型
-using Vertex       = boost::graph_traits<Graph>::vertex_descriptor;
-using Edge         = boost::graph_traits<Graph>::edge_descriptor;
-using AdjacencyIter= boost::graph_traits<Graph>::adjacency_iterator;
-using EdgeIter     = boost::graph_traits<Graph>::edge_iterator;
+inline void add_undirected_edge(Graph& G, int u, int v, double weight = 1.0)
+{
+    G.adj[u].push_back({v, weight});
+    if (u != v)
+        G.adj[v].push_back({u, weight});
+}
+
+inline std::size_t num_edges(const Graph& G)
+{
+    std::size_t m = 0;
+    for (const auto& nbrs : G.adj)
+        m += nbrs.size();
+    return m / 2;
+}
+
+inline bool find_edge_weight(const Graph& G, int u, int v, double& weight)
+{
+    for (const auto& e : G.adj[u]) {
+        if (e.to == v) {
+            weight = e.weight;
+            return true;
+        }
+    }
+    return false;
+}
+
+template <class Func>
+inline void for_each_undirected_edge(const Graph& G, Func&& func)
+{
+    for (int u = 0; u < G.n; ++u) {
+        for (const auto& e : G.adj[u]) {
+            if (u <= e.to)
+                func(u, e.to, e.weight);
+        }
+    }
+}

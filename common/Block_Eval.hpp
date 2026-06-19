@@ -7,10 +7,6 @@
 #include <numeric>
 #include <vector>
 
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/graph_traits.hpp>
-#include <boost/property_map/property_map.hpp>
-
 #include "Types.hpp"
 #include "Coloring.hpp"
 #include "BlockIO.hpp"
@@ -95,20 +91,13 @@ CountInternalEdges(const Graph& G,
 {
     std::vector<int> internal(nb, 0);
 
-    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
-
-    for(boost::tie(ei, ei_end) = boost::edges(G);
-        ei != ei_end; ++ei){
-
-        int u = static_cast<int>(boost::source(*ei, G));
-        int v = static_cast<int>(boost::target(*ei, G));
-
+    for_each_undirected_edge(G, [&](int u, int v, double) {
         int bu = block_of[u];
         int bv = block_of[v];
 
         if(IsValidBlockIndex(bu, nb) && bu == bv)
             internal[bu] += 1;
-    }
+    });
 
     return internal;
 }
@@ -117,11 +106,11 @@ CountInternalEdges(const Graph& G,
 inline std::vector<int>
 BlockDegreesBinary(const Graph& T)
 {
-    int nb = static_cast<int>(boost::num_vertices(T));
+    int nb = static_cast<int>(num_vertices(T));
     std::vector<int> deg(nb, 0);
 
     for(int b = 0; b < nb; ++b)
-        deg[b] = static_cast<int>(boost::degree(b, T));
+        deg[b] = static_cast<int>(degree(b, T));
 
     return deg;
 }
@@ -189,14 +178,7 @@ inline void CountEdgeLocality(const Graph& G,
     internal = 0;
     external = 0;
 
-    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
-
-    for(boost::tie(ei, ei_end) = boost::edges(G);
-        ei != ei_end; ++ei){
-
-        int u = static_cast<int>(boost::source(*ei, G));
-        int v = static_cast<int>(boost::target(*ei, G));
-
+    for_each_undirected_edge(G, [&](int u, int v, double) {
         int bu = block_of[u];
         int bv = block_of[v];
 
@@ -204,7 +186,7 @@ inline void CountEdgeLocality(const Graph& G,
             internal += 1;
         else
             external += 1;
-    }
+    });
 }
 
 inline double InternalEdgeRatio(int internal, int external)
@@ -270,13 +252,13 @@ inline double MeanInternalAverageDegree(const std::vector<int>& nodes_per_block,
 
 inline double BlockGraphDensity(const Graph& T)
 {
-    int nb = static_cast<int>(boost::num_vertices(T));
+    int nb = static_cast<int>(num_vertices(T));
 
     if(nb <= 1)
         return 0.0;
 
     double max_edges = static_cast<double>(nb) * (nb - 1) / 2.0;
-    return static_cast<double>(boost::num_edges(T)) / max_edges;
+    return static_cast<double>(num_edges(T)) / max_edges;
 }
 
 // モジュラリティ (未加重)
@@ -290,34 +272,27 @@ inline double Modularity_Unweighted(const Graph& G,
     if(nb <= 0)
         return 0.0;
 
-    const double m = static_cast<double>(boost::num_edges(G));
+    const double m = static_cast<double>(num_edges(G));
     if(m == 0.0)
         return 0.0;
 
     std::vector<int> Kb(nb, 0);
     std::vector<int> Lb(nb, 0);
 
-    for(int u = 0; u < static_cast<int>(boost::num_vertices(G)); ++u){
+    for(int u = 0; u < static_cast<int>(num_vertices(G)); ++u){
         int b = block_of[u];
 
         if(IsValidBlockIndex(b, nb))
-            Kb[b] += static_cast<int>(boost::degree(u, G));
+            Kb[b] += static_cast<int>(degree(u, G));
     }
 
-    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
-
-    for(boost::tie(ei, ei_end) = boost::edges(G);
-        ei != ei_end; ++ei){
-
-        int u = static_cast<int>(boost::source(*ei, G));
-        int v = static_cast<int>(boost::target(*ei, G));
-
+    for_each_undirected_edge(G, [&](int u, int v, double) {
         int bu = block_of[u];
         int bv = block_of[v];
 
         if(IsValidBlockIndex(bu, nb) && bu == bv)
             Lb[bu] += 1;
-    }
+    });
 
     double Q = 0.0;
 
@@ -345,28 +320,20 @@ inline double Modularity_Weighted(const Graph& G,
     std::vector<double> Kb(nb, 0.0);
     std::vector<double> Lb(nb, 0.0);
 
-    auto wmap = boost::get(boost::edge_weight, G);
     double W = 0.0;
 
-    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
-
-    for(boost::tie(ei, ei_end) = boost::edges(G);
-        ei != ei_end; ++ei){
-
-        int u = static_cast<int>(boost::source(*ei, G));
-        int v = static_cast<int>(boost::target(*ei, G));
-
+    for_each_undirected_edge(G, [&](int u, int v, double weight) {
         if(u == v)
-            continue;
+            return;
 
-        double w = std::abs(static_cast<double>(wmap[*ei]));
+        double w = std::abs(weight);
         W += w;
-    }
+    });
 
     if(W == 0.0)
         return 0.0;
 
-    for(int u = 0; u < static_cast<int>(boost::num_vertices(G)); ++u){
+    for(int u = 0; u < static_cast<int>(num_vertices(G)); ++u){
         int b = block_of[u];
 
         if(!IsValidBlockIndex(b, nb))
@@ -374,34 +341,24 @@ inline double Modularity_Weighted(const Graph& G,
 
         double deg = 0.0;
 
-        boost::graph_traits<Graph>::out_edge_iterator ei2, ei2_end;
-
-        for(boost::tie(ei2, ei2_end) = boost::out_edges(u, G);
-            ei2 != ei2_end; ++ei2){
-
-            deg += std::abs(static_cast<double>(wmap[*ei2]));
-        }
+        for(const auto& e : G.adj[u])
+            deg += std::abs(e.weight);
 
         Kb[b] += deg;
     }
 
-    for(boost::tie(ei, ei_end) = boost::edges(G);
-        ei != ei_end; ++ei){
-
-        int u = static_cast<int>(boost::source(*ei, G));
-        int v = static_cast<int>(boost::target(*ei, G));
-
+    for_each_undirected_edge(G, [&](int u, int v, double weight) {
         if(u == v)
-            continue;
+            return;
 
         int bu = block_of[u];
         int bv = block_of[v];
 
         if(IsValidBlockIndex(bu, nb) && bu == bv){
-            double w = std::abs(static_cast<double>(wmap[*ei]));
+            double w = std::abs(weight);
             Lb[bu] += w;
         }
-    }
+    });
 
     double Q = 0.0;
 
@@ -454,8 +411,8 @@ EvaluatePartitioningMetrics(const Graph& G,
 {
     BlockEvaluationResult r;
 
-    r.num_vertices = static_cast<int>(boost::num_vertices(G));
-    r.num_edges = static_cast<int>(boost::num_edges(G));
+    r.num_vertices = static_cast<int>(num_vertices(G));
+    r.num_edges = static_cast<int>(num_edges(G));
     r.num_blocks = nb;
 
     if(nb <= 0)
@@ -489,7 +446,7 @@ EvaluatePartitioningMetrics(const Graph& G,
     Graph T = BuildBlockGraph(G, block_of, BlockEdgeWeight::Binary);
 
     r.block_degrees = BlockDegreesBinary(T);
-    r.block_graph_edges = static_cast<int>(boost::num_edges(T));
+    r.block_graph_edges = static_cast<int>(num_edges(T));
     r.block_graph_density = BlockGraphDensity(T);
     r.avg_block_graph_degree = Mean(r.block_degrees);
 
@@ -682,7 +639,7 @@ inline void EvaluateBlockDensity(const Graph& G,
 inline void EvaluateBlockGraph(const Graph& T)
 {
     std::cout << "Block graph edges : "
-              << boost::num_edges(T) << "\n";
+              << num_edges(T) << "\n";
 
     std::cout << "Block graph density : "
               << BlockGraphDensity(T) << "\n";
@@ -707,31 +664,14 @@ void EvaluateLocalityScore(
     int internal = 0;
     int external = 0;
 
-    int N = static_cast<int>(boost::num_vertices(G));
+    int N = static_cast<int>(num_vertices(G));
 
-    for(int u = 0; u < N; ++u){
-
-        boost::graph_traits<Graph>::out_edge_iterator ei, ei_end;
-
-        for(boost::tie(ei, ei_end) = boost::out_edges(u, G);
-            ei != ei_end; ++ei){
-
-            int v = static_cast<int>(boost::target(*ei, G));
-
-            /*
-             * 無向グラフの各辺を1回だけ数える。
-             * Boost の undirectedS では、全頂点の out_edges を走査すると
-             * 同じ無向辺を u 側と v 側の両方から数える可能性がある。
-             */
-            if(u < v){
-
-                if(block_of[u] == block_of[v])
-                    internal++;
-                else
-                    external++;
-            }
-        }
-    }
+    for_each_undirected_edge(G, [&](int u, int v, double) {
+        if(block_of[u] == block_of[v])
+            internal++;
+        else
+            external++;
+    });
 
     double score =
         static_cast<double>(internal)

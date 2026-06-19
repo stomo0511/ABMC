@@ -27,7 +27,6 @@ Graph Read_MM_UD(const std::string& file_name)
     }
 
     Graph G(row_size);
-    WeightMap weightmap = get(boost::edge_weight, G);
 
     int row, col;
     double val;
@@ -36,13 +35,14 @@ Graph Read_MM_UD(const std::string& file_name)
         if (line.empty() || line[0] == '%') continue;
 
         std::istringstream edge_stream(line);
-        edge_stream >> row >> col >> val;
+        val = 1.0;
+        edge_stream >> row >> col;
+        if (!(edge_stream >> val)) val = 1.0;
 
         // Matrix Market is 1-based index → convert to 0-based
         if (row > col)
         {
-        auto e = add_edge(row - 1, col - 1, G).first;
-        weightmap[e] = val;
+            add_undirected_edge(G, row - 1, col - 1, val);
         }
     }
 
@@ -54,8 +54,7 @@ void WriteReorderedMatrixMarket_UD(
     const std::vector<int>& perm,
     const std::string& file_name)
 {
-    const int n = static_cast<int>(boost::num_vertices(G));
-    auto weightmap = boost::get(boost::edge_weight, G);
+    const int n = G.n;
 
     // 無向グラフとして、upper triangle のみ出力
     struct Entry {
@@ -63,21 +62,16 @@ void WriteReorderedMatrixMarket_UD(
         double a;
     };
     std::vector<Entry> entries;
-    entries.reserve(boost::num_edges(G));
+    entries.reserve(num_edges(G));
 
-    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
-    for (boost::tie(ei, ei_end) = boost::edges(G); ei != ei_end; ++ei) {
-        int u = static_cast<int>(boost::source(*ei, G));
-        int v = static_cast<int>(boost::target(*ei, G));
-        double w = static_cast<double>(weightmap[*ei]);
-
+    for_each_undirected_edge(G, [&](int u, int v, double w) {
         int ru = perm[u];
         int rv = perm[v];
         if (ru > rv) std::swap(ru, rv);
 
         // Matrix Market は 1-based
         entries.push_back({ru + 1, rv + 1, w});
-    }
+    });
 
     std::sort(entries.begin(), entries.end(),
               [](const Entry& x, const Entry& y) {

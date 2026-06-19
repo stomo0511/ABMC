@@ -19,7 +19,7 @@ int main(int argc, char** argv)
     }
 
     Graph G = Read_MM_UD(argv[1]);
-    int N = static_cast<int>(boost::num_vertices(G));
+    int N = num_vertices(G);
 
     std::vector<int> block_of;
     int nb = ReadBlockInfo_1Based(argv[2], N, block_of);
