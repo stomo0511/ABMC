@@ -9,7 +9,7 @@ CXXFLAGS = -O3 -march=native -std=c++17
 # 	    -Wno-sign-conversion -Wno-unused-function \
 #         -Wno-missing-declarations \
 #         -std=c++14 -mcx16 -O3 -DNDEBUG
-LDFLAGS = -lboost_system -lboost_filesystem -lboost_iostreams -ligraph
+# LDFLAGS = -lboost_system -lboost_filesystem -lboost_iostreams -ligraph
 
 UNAME = $(shell uname)
 ifeq ($(UNAME), Darwin)
@@ -24,7 +24,8 @@ ifeq ($(UNAME), Linux)
 	IGP_INCDIR = /opt/igraph-1.0.1/include
 	IGP_LIBDIR = /opt/igraph-1.0.1/lib
 	CXXFLAGS := -I$(IGP_INCDIR) $(CXXFLAGS)
-	LDFLAGS := -L$(IGP_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph -lopenblas
+# 	LDFLAGS := -L$(IGP_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph -lopenblas
+	LDFLAGS := -L$(IGP_LIBDIR) -ligraph -lopenblas
 endif
 
 ifeq ($(UNAME), Darwin)

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <numeric>
 #include "Types.hpp"
 #include "Coloring.hpp"

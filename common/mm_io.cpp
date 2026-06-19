@@ -1,5 +1,7 @@
 #include "mm_io.hpp"
 
+#include <algorithm>
+
 Graph Read_MM_UD(const std::string& file_name)
 {
     std::ifstream infile(file_name);

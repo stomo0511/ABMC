@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <unordered_map>
+
 #include "Types.hpp"
 #include "mm_io.hpp"
 #include "BlockIO.hpp"
