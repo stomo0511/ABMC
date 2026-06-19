@@ -16,7 +16,8 @@ ifeq ($(UNAME), Darwin)
 	BREW_INCDIR = /opt/homebrew/include
 	BREW_LIBDIR = /opt/homebrew/lib
 	CXXFLAGS := -I$(BREW_INCDIR) $(CXXFLAGS)
-	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
+# 	LDFLAGS := -L$(BREW_LIBDIR) -lboost_filesystem -lboost_iostreams -ligraph
+	LDFLAGS := -L$(BREW_LIBDIR) -ligraph
 endif
 
 UNAME = $(shell uname)
