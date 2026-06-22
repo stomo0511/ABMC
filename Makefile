@@ -27,7 +27,7 @@ else
 	RABBIT_EXTRA_LDFLAGS = -ltcmalloc_minimal -lnuma
 endif
 
-TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock
+TARGET = gmc abmc louvain leiden leiden_cpm gve-leiden gve-leiden-cpm eblock ite_leiden ite_leiden_cpm
 HDRS := common/Timer.hpp
 
 ASRCS := abmc.cpp
@@ -73,6 +73,10 @@ CHDRS := $(CSRCS:.cpp=.hpp)
 
 ESRCS := eblock.cpp
 EOBJS := $(ESRCS:.cpp=.o)
+
+ITESRCS := ite_leiden.cpp
+ITEOBJS := $(ITESRCS:.cpp=.o)
+ITECPMOBJS := ite_leiden_cpm.o
 
 all: $(TARGET)
 
@@ -127,9 +131,14 @@ eblock: $(EOBJS) $(COBJS)
 common/%.o: common/%.cpp $(CHDRS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-install: $(TARGET)
-	install -d $(HOME)/.local/bin
-	install -m 755 $(TARGET) $(HOME)/.local/bin/
+ite_leiden: $(ITEOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
+ite_leiden_cpm: $(ITECPMOBJS) $(COBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+
+ite_leiden_cpm.o: ite_leiden.cpp common/Timer.hpp
+	$(CXX) $(CXXFLAGS) -DCPM -c $< -o $@
+	
 clean:
 	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS) $(EOBJS)
