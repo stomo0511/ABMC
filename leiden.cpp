@@ -175,26 +175,11 @@ int main(int argc, char** argv) {
     Graph T = BuildBlockGraph(G, dense, BlockEdgeWeight::Binary);
 
     //////////////////////////////////////////////
-    // ブロック内結合度の評価
-    auto internal = CountInternalEdges(G, dense, nb);
-    double total_avg = 0.0;
-
-    for (int b = 0; b < nb; ++b) {
-        double avg_deg = (sizes[b] > 0) ? 2.0 * internal[b] / sizes[b] : 0.0;
-        total_avg += avg_deg;
-    }
-
-    total_avg = 0.0;
-    for (int b = 0; b < nb; ++b) {
-        int deg = static_cast<int>(degree(b, T));
-        total_avg += deg;
-    }
-
-    //////////////////////////////////////////////
     // ブロックグラフの彩色
     std::vector<int> block_color;
     // auto coloring_begin = Clock::now();
-    int nc = Greedy_Coloring(T, block_color);
+    // int nc = Greedy_Coloring(T, block_color);
+    int nc = Greedy_Coloring_Balanced(T, block_color);
 
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);

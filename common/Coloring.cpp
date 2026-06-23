@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <limits>
 #include <numeric>
 #include "Types.hpp"
 #include "Coloring.hpp"
@@ -52,6 +53,70 @@ int Greedy_Coloring(const Graph& G, std::vector<int>& color)
     }
 
     return max_color + 1; // 使用色数
+}
+
+// グラフ G に対して貪欲法で彩色を行う
+// ただし、使用可能な既存色の中で、色クラスサイズが最小の色を優先する
+// 新しい色は、使用可能な既存色が存在しない場合のみ作る
+// 戻り値: 使用した色の数
+int Greedy_Coloring_Balanced(const Graph& G, std::vector<int>& color)
+{
+    const std::size_t N = G.n;
+    color.assign(N, -1); // -1: uncolored
+    if (N == 0) return 0;
+
+    struct VertexDegree {
+        int v;
+        std::size_t deg;
+    };
+
+    std::vector<VertexDegree> order;
+    order.reserve(N);
+    for (int v = 0; v < static_cast<int>(N); ++v) {
+        order.push_back({v, G.adj[v].size()});
+    }
+
+    // 次数降順、同次数ならID昇順
+    std::sort(order.begin(), order.end(),
+              [](const VertexDegree& a, const VertexDegree& b) {
+                  if (a.deg != b.deg) return a.deg > b.deg;
+                  return a.v < b.v;
+              });
+
+    // 近傍色のマーキング（タイムスタンプ法）
+    std::vector<int> mark(N + 1, -1);
+    std::vector<int> color_size(N + 1, 0);
+    int stamp = 0;
+    int max_color = -1;
+
+    for (const auto& vd : order) {
+        const int u = vd.v;
+        ++stamp;
+
+        for (const auto& e : G.adj[u]) {
+            const int c = color[e.to];
+            if (c >= 0) mark[c] = stamp;
+        }
+
+        int best_color = -1;
+        int best_size = std::numeric_limits<int>::max();
+        for (int c = 0; c <= max_color; ++c) {
+            if (mark[c] != stamp && color_size[c] < best_size) {
+                best_color = c;
+                best_size = color_size[c];
+            }
+        }
+
+        // 使用可能な既存色がない場合のみ、新しい色を作る
+        if (best_color == -1) {
+            best_color = ++max_color;
+        }
+
+        color[u] = best_color;
+        ++color_size[best_color];
+    }
+
+    return max_color + 1;
 }
 
 // 頻度順に色ラベルを付け替える
