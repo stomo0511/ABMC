@@ -178,7 +178,8 @@ int main(int argc, char** argv) {
     Graph block_graph = BuildBlockGraphFromGve(graph, dense, static_cast<int>(community_count));
 
     std::vector<int> block_color;
-    const int color_count = Greedy_Coloring(block_graph, block_color);
+    // const int color_count = Greedy_Coloring(block_graph, block_color);
+    const int color_count = Greedy_Coloring_Balanced(block_graph, block_color);
     RelabelColorsByClassSize(block_color);
 
     auto after_read_to_write_end = Clock::now();
