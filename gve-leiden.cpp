@@ -17,6 +17,19 @@
 #include "common/Timer.hpp"
 #include "gve-leiden-inc/main.hxx"
 
+LeidenOptions MakeLeidenOptions()
+{
+    LeidenOptions opt;
+    opt.repeat = 2;                    // Leiden 法を繰り返す回数
+    opt.resolution = 1.0;              // コミュニティ分割の解像度
+    opt.tolerance = 1.0e-5;            // 収束判定の許容値
+    opt.aggregationTolerance = 0.8;    // 集約処理の許容値
+    opt.toleranceDrop = 10.0;          // パスごとの許容値の減少係数
+    opt.maxIterations = 200;            // 1 パス当たりの最大反復回数
+    opt.maxPasses = 50;                // 最大パス数
+    return opt;
+}
+
 std::vector<int> relabel_dense(
     const std::vector<int>& comm,
     std::vector<int>* sizes_out = nullptr)
@@ -144,9 +157,11 @@ int main(int argc, char** argv) {
         graph = symmetricizeOmp(graph);
     }
 
+    const LeidenOptions leiden_options = MakeLeidenOptions();
+
     auto after_read_to_write_begin = Clock::now();
 
-    auto result = leidenStaticOmp(graph);
+    auto result = leidenStaticOmp(graph, leiden_options);
 
     std::vector<int> block_of(rows, -1);
     for (size_t u = 0; u < rows; ++u) {
@@ -196,6 +211,13 @@ int main(int argc, char** argv) {
               << " NB = " << community_count
               << " NC = " << color_count
               << " modularity = " << modularity << "\n";
+    std::cout << "resolution = " << leiden_options.resolution << "\n"
+              << "tolerance = " << leiden_options.tolerance << "\n"
+              << "aggregationTolerance = " << leiden_options.aggregationTolerance << "\n"
+              << "toleranceDrop = " << leiden_options.toleranceDrop << "\n"
+              << "maxIterations = " << leiden_options.maxIterations << "\n"
+              << "maxPasses = " << leiden_options.maxPasses << "\n"
+              << "repeat = " << leiden_options.repeat << "\n";
 
     return 0;
 }
