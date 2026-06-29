@@ -183,7 +183,8 @@ int main(int argc, char** argv) {
     // ブロックグラフの彩色
     std::vector<int> block_color;
     // int nc = Greedy_Coloring(T, block_color);
-    int nc = Greedy_Coloring_Balanced(T, block_color);
+    // int nc = Greedy_Coloring_Balanced(T, block_color);
+    int nc = Greedy_Coloring_FixedNc_Balanced(T, block_color);
 
 
     // 色ラベルを頻度順に付け替え

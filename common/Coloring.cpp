@@ -119,6 +119,81 @@ int Greedy_Coloring_Balanced(const Graph& G, std::vector<int>& color)
     return max_color + 1;
 }
 
+// Greedy_Coloring で色数 nc を確定した後、nc 色を固定したまま色クラスサイズを均等化する
+// 新しい色は作らず、隣接頂点と同じ色にならない合法な頂点移動のみを行う
+// 戻り値: 使用色数 nc
+int Greedy_Coloring_FixedNc_Balanced(const Graph& G, std::vector<int>& color)
+{
+    const int N = static_cast<int>(G.n);
+    const int nc = Greedy_Coloring(G, color);
+    if (nc <= 1) return nc;
+
+    std::vector<int> color_size(nc, 0);
+    for (int v = 0; v < N; ++v) {
+        ++color_size[color[v]];
+    }
+
+    auto can_move_to_color = [&](int u, int c_to) {
+        for (const auto& e : G.adj[u]) {
+            if (color[e.to] == c_to) return false;
+        }
+        return true;
+    };
+
+    std::vector<int> from_order(nc);
+    std::vector<int> to_order(nc);
+    const int max_passes = 10 * N;
+
+    for (int pass = 0; pass < max_passes; ++pass) {
+        std::iota(from_order.begin(), from_order.end(), 0);
+        std::iota(to_order.begin(), to_order.end(), 0);
+
+        std::sort(from_order.begin(), from_order.end(),
+                  [&](int a, int b) {
+                      if (color_size[a] != color_size[b]) {
+                          return color_size[a] > color_size[b];
+                      }
+                      return a < b;
+                  });
+        std::sort(to_order.begin(), to_order.end(),
+                  [&](int a, int b) {
+                      if (color_size[a] != color_size[b]) {
+                          return color_size[a] < color_size[b];
+                      }
+                      return a < b;
+                  });
+
+        bool moved = false;
+        for (int c_from : from_order) {
+            for (int c_to : to_order) {
+                if (c_from == c_to ||
+                    color_size[c_from] <= color_size[c_to] + 1) {
+                    continue;
+                }
+
+                for (int u = 0; u < N; ++u) {
+                    if (color[u] != c_from || !can_move_to_color(u, c_to)) {
+                        continue;
+                    }
+
+                    color[u] = c_to;
+                    --color_size[c_from];
+                    ++color_size[c_to];
+                    moved = true;
+                    break;
+                }
+
+                if (moved) break;
+            }
+            if (moved) break;
+        }
+
+        if (!moved) break;
+    }
+
+    return nc;
+}
+
 // 頻度順に色ラベルを付け替える
 // 同数なら旧ラベルの昇順を優先（安定なタイブレーク）
 void RelabelColorsByClassSize(std::vector<int>& color) {
