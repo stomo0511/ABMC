@@ -15,7 +15,7 @@ ifeq ($(UNAME), Darwin)  # MacOS
 	GVE_OMP_CXXFLAGS = -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
 	GVE_OMP_LDFLAGS  = -L/opt/homebrew/opt/libomp/lib -lomp
 	RABBIT_EXTRA_LDFLAGS =
-else ifeq ($(UNAME), Linux)  # EPYC
+else ifeq ($(UNAME), Linux)
 	MKL_INCLUDE = $(MKLROOT)/include
 	MKL_LIB = $(MKLROOT)/lib/intel64
 	MKL_LIBS = -lmkl_rt -lpthread -lm -ldl
@@ -23,7 +23,7 @@ else ifeq ($(UNAME), Linux)  # EPYC
 	CXXFLAGS += -I$(MKL_INCLUDE)
 	LDFLAGS += -L$(MKL_LIB) $(MKL_LIBS)
 
-	ifeq ($(HOST_NAME), epyc)
+	ifeq ($(HOST_NAME), epyc) # EPYC
 		IGP_INCDIR = /opt/igraph-1.0.1/include
 		IGP_LIBDIR = /opt/igraph-1.0.1/lib
 		CXXFLAGS += -I$(IGP_INCDIR) 
