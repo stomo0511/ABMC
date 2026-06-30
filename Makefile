@@ -141,4 +141,4 @@ ite_leiden_cpm.o: ite_leiden.cpp common/Timer.hpp
 	$(CXX) $(CXXFLAGS) -DCPM -c $< -o $@
 	
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS) $(EOBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS) $(EOBJS) $(ITEOBJS)
