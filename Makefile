@@ -1,27 +1,28 @@
-CXX = g++
-CXXFLAGS = -O3 -march=native -std=c++17
+CXX := g++
+CXXFLAGS := -O3 -march=native -std=c++17
+LDFLAGS :=
 
 UNAME = $(shell uname)
+USER_NAME = $(shell whoami)
+HOST_NAME = $(shell hostname)
+
 ifeq ($(UNAME), Darwin)
 	BREW_INCDIR = /opt/homebrew/include
 	BREW_LIBDIR = /opt/homebrew/lib
-	CXXFLAGS := -I$(BREW_INCDIR) $(CXXFLAGS)
-	LDFLAGS := -L$(BREW_LIBDIR) -ligraph
-endif
+	CXXFLAGS = -I$(BREW_INCDIR) $(CXXFLAGS)
+	LDFLAGS = -L$(BREW_LIBDIR) -ligraph $(LDFLAGS)
 
-UNAME = $(shell uname)
-ifeq ($(UNAME), Linux)
-	IGP_INCDIR = /opt/igraph-1.0.1/include
-	IGP_LIBDIR = /opt/igraph-1.0.1/lib
-	CXXFLAGS := -I$(IGP_INCDIR) $(CXXFLAGS)
-	LDFLAGS := -L$(IGP_LIBDIR) -ligraph -lopenblas
-endif
-
-ifeq ($(UNAME), Darwin)
 	GVE_OMP_CXXFLAGS = -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
 	GVE_OMP_LDFLAGS  = -L/opt/homebrew/opt/libomp/lib -lomp
 	RABBIT_EXTRA_LDFLAGS =
-else
+else ifeq ($(UNAME), Linux)
+	ifeq ($(HOST_NAME), epyc)
+		IGP_INCDIR = /opt/igraph-1.0.1/include
+		IGP_LIBDIR = /opt/igraph-1.0.1/lib
+		CXXFLAGS = $(CXXFLAGS) -I$(IGP_INCDIR) 
+		LDFLAGS = $(LDFLAGS) -L$(IGP_LIBDIR) -ligraph -lopenblas
+	endif
+
 	GVE_OMP_CXXFLAGS = -fopenmp
 	GVE_OMP_LDFLAGS  = -fopenmp
 	RABBIT_EXTRA_LDFLAGS = -ltcmalloc_minimal -lnuma
@@ -32,15 +33,12 @@ HDRS := common/Timer.hpp
 
 ASRCS := abmc.cpp
 AOBJS := $(ASRCS:.cpp=.o)
-AHDRS := $(ASRCS:.cpp=.hpp)
 
 LSRCS := louvain.cpp
 LOBJS := $(LSRCS:.cpp=.o)
-LHDRS := $(LSRCS:.cpp=.hpp)
 
 L2SRCS := leiden.cpp
 L2OBJS := $(L2SRCS:.cpp=.o)
-L2HDRS := $(L2SRCS:.cpp=.hpp)
 L2CPMOBJS := leiden_cpm.o
 
 GVESRCS := gve-leiden.cpp
@@ -53,7 +51,6 @@ CPMHDRS := $(wildcard gve-leiden-inc/*.hxx) $(wildcard inc/*.hxx) common/Types.h
 
 GSRCS := gmc.cpp
 GOBJS := $(GSRCS:.cpp=.o)
-GHDRS := $(GSRCS:.cpp=.hpp)
 
 RSRCS := rabmc.cpp
 ROBJS := $(RSRCS:.cpp=.o)
@@ -141,4 +138,4 @@ ite_leiden_cpm.o: ite_leiden.cpp common/Timer.hpp
 	$(CXX) $(CXXFLAGS) -DCPM -c $< -o $@
 	
 clean:
-	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS) $(EOBJS) $(ITEOBJS)
+	rm -f $(TARGET) $(AOBJS) $(LOBJS) $(L2OBJS) $(L2CPMOBJS) $(GOBJS) $(ROBJS) $(BOBJS) $(MOBJS) $(GVEOBJS) $(CPMOBJS) $(COBJS) $(EOBJS) $(ITEOBJS) $(ITECPMOBJS)
