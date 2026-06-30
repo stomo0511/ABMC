@@ -37,6 +37,13 @@ else ifeq ($(UNAME), Linux)
 		LDFLAGS += -L$(IGP_LIBDIR) -ligraph
 	endif
 
+	ifeq ($(USER_NAME), y01505)  # 東北大
+		IGP_INCDIR = $(HOME)/WorkSpace/igraph/include
+        IGP_LIBDIR = $(HOME)/WorkSpace/igraph/lib64
+		CXXFLAGS += -I$(IGP_INCDIR) 
+		LDFLAGS += -L$(IGP_LIBDIR) -ligraph
+	endif
+
 	GVE_OMP_CXXFLAGS = -fopenmp
 	GVE_OMP_LDFLAGS  = -fopenmp
 	RABBIT_EXTRA_LDFLAGS = -ltcmalloc_minimal -lnuma
