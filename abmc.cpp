@@ -129,7 +129,9 @@ BlockPartition ABMC_Blocking(const Graph& G, int block_size, BlockPolicy policy)
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::fprintf(stderr, "usage: %s <matrix.mtx> <# blocks> [policy(1|2|3)]\n", argv[0]);
+        std::fprintf(stderr,
+             "usage: %s <matrix.mtx> <# blocks> [policy(1|2|3)] [coloring(1|2|3)]\n",
+             argv[0]);
         return 1;
     }
 
@@ -143,17 +145,14 @@ int main(int argc, char** argv) {
     int p_in = (argc >= 4) ? std::atoi(argv[3]) : 1;  // ブロック化ポリシー
     if (p_in < 1 || p_in > 3) p_in = 1;
 
+    int c_in = (argc >= 5) ? std::atoi(argv[4]) : 1;  // 彩色ルーチン選択
+    if (c_in < 1 || c_in > 3) c_in = 1;
+
     // ブロック化ポリシー設定
     BlockPolicy policy = static_cast<BlockPolicy>(p_in);
 
     // ブロック化
     BlockPartition part = ABMC_Blocking(G, bs, policy);
-
-    //////////////////////////////////////////////
-    // デバッグ用出力
-    // std::printf("ABMC blocking with %s\n", policy_name(policy));
-    // std::printf("#blocks=%d, block size=%d\n", B, part.s);
-    // DumpBlocks(part);
 
     //////////////////////////////////////////////
     // ブロックグラフの作成
@@ -169,39 +168,48 @@ int main(int argc, char** argv) {
         double avg_deg = (n > 0) ? 2.0 * internal[b] / n : 0.0;
         total_avg += avg_deg;
     }
-    // std::cout << "Total average degree: " << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
     total_avg = 0.0;
     for (int b = 0; b < part.nb; ++b) {
         int deg = static_cast<int>(degree(b, T));
         total_avg += deg;
     }
-    // std::cout << "Block graph average degree: "
-    //           << (part.nb > 0 ? total_avg / part.nb : 0.0) << "\n";
 
     //////////////////////////////////////////////
     // ブロックグラフの彩色
     std::vector<int> block_color;
-    // int nc = Greedy_Coloring(T, block_color);
-    // int nc = Greedy_Coloring_Balanced(T, block_color);
-    int nc = Greedy_Coloring_FixedNc_Balanced(T, block_color);
+    int nc = 0;
 
+    switch (c_in) {
+    case 1:
+        nc = Greedy_Coloring(T, block_color);
+        break;
+
+    case 2:
+        nc = Greedy_Coloring_Balanced(T, block_color);
+        break;
+
+    case 3:
+        nc = Greedy_Coloring_FixedNc_Balanced(T, block_color);
+        break;
+
+    default:
+        nc = Greedy_Coloring(T, block_color);
+        break;
+    }
 
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);
 
     auto after_read_to_write_end = Clock::now();
 
-    //////////////////////////////////////////////
-    // デバッグ用出力
-    // DumpBlockEdges(T);
-    // DumpBlockAdjacency(T);
-
     // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
     std::string stem = file_stem(argv[1]);
     stem += "_abmc";
-    stem += "_B" + std::to_string(B);  // # blocks
-    stem += "_p" + std::to_string(p_in);    // policy
+    stem += "_B" + std::to_string(B);       // # blocks
+    stem += "_p" + std::to_string(p_in);    // blocking policy
+    stem += "_c" + std::to_string(c_in);    // coloring method
+
     std::string blk_path  = stem + ".blk";
     std::string bcol_path = stem + ".bcol";
 

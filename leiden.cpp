@@ -15,7 +15,8 @@ extern "C" {
 }
 
 // Leiden法によるクラスタリング
-std::vector<int> Leiden_from_Graph(const Graph& G, double resolution) {
+std::vector<int> Leiden_from_Graph(const Graph& G, double resolution)
+{
     igraph_rng_seed(igraph_rng_default(), 42u);
 
     igraph_t ig;
@@ -147,9 +148,33 @@ std::vector<int> relabel_dense(
     return dense;
 }
 
+std::string sanitize_resolution_for_filename(const std::string& s)
+{
+    std::string out;
+    out.reserve(s.size());
+
+    for (char ch : s) {
+        if (ch == '.') {
+            out += 'p';
+        } else if (ch == '+') {
+            // 通常は出ないが、+1.0 のような入力への対応
+            continue;
+        } else if (ch == '-') {
+            // 念のため。解像度は0以上なので通常は不要
+            out += 'm';
+        } else {
+            out += ch;
+        }
+    }
+
+    return out;
+}
+
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::fprintf(stderr, "usage: %s <resolution> <matrix.mtx>\n", argv[0]);
+    if (argc < 3 || argc > 4) {
+        std::fprintf(stderr,
+                    "usage: %s <resolution> <matrix.mtx> [coloring(1|2|3)]\n",
+                    argv[0]);
         return 1;
     }
 
@@ -160,6 +185,9 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "invalid resolution: %s\n", argv[1]);
         return 1;
     }
+
+    int c_in = (argc >= 4) ? std::atoi(argv[3]) : 1;  // 彩色ルーチン選択
+    if (c_in < 1 || c_in > 3) c_in = 1;
 
     Graph G = Read_MM_UD(argv[2]);    // 疎行列の隣接グラフ（無向グラフ）
 
@@ -177,10 +205,25 @@ int main(int argc, char** argv) {
     //////////////////////////////////////////////
     // ブロックグラフの彩色
     std::vector<int> block_color;
-    // auto coloring_begin = Clock::now();
-    // int nc = Greedy_Coloring(T, block_color);
-    // int nc = Greedy_Coloring_Balanced(T, block_color);
-    int nc = Greedy_Coloring_FixedNc_Balanced(T, block_color);
+    int nc = 0;
+
+    switch (c_in) {
+    case 1:
+        nc = Greedy_Coloring(T, block_color);
+        break;
+
+    case 2:
+        nc = Greedy_Coloring_Balanced(T, block_color);
+        break;
+
+    case 3:
+        nc = Greedy_Coloring_FixedNc_Balanced(T, block_color);
+        break;
+
+    default:
+        nc = Greedy_Coloring(T, block_color);
+        break;
+    }
 
     // 色ラベルを頻度順に付け替え
     RelabelColorsByClassSize(block_color);
@@ -194,6 +237,10 @@ int main(int argc, char** argv) {
 #else
     stem += "_leiden";
 #endif
+
+    stem += "_r" + sanitize_resolution_for_filename(argv[1]);
+    stem += "_c" + std::to_string(c_in);
+
     std::string blk_path  = stem + ".blk";
     std::string bcol_path = stem + ".bcol";
 
