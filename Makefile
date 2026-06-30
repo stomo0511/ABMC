@@ -6,7 +6,7 @@ UNAME = $(shell uname)
 USER_NAME = $(shell whoami)
 HOST_NAME = $(shell hostname)
 
-ifeq ($(UNAME), Darwin)
+ifeq ($(UNAME), Darwin)  # MacOS
 	BREW_INCDIR = /opt/homebrew/include
 	BREW_LIBDIR = /opt/homebrew/lib
 	CXXFLAGS += -I$(BREW_INCDIR)
@@ -15,12 +15,26 @@ ifeq ($(UNAME), Darwin)
 	GVE_OMP_CXXFLAGS = -Xpreprocessor -fopenmp -I/opt/homebrew/opt/libomp/include
 	GVE_OMP_LDFLAGS  = -L/opt/homebrew/opt/libomp/lib -lomp
 	RABBIT_EXTRA_LDFLAGS =
-else ifeq ($(UNAME), Linux)
+else ifeq ($(UNAME), Linux)  # EPYC
+	MKL_INCLUDE = $(MKLROOT)/include
+	MKL_LIB = $(MKLROOT)/lib/intel64
+	MKL_LIBS = -lmkl_rt -lpthread -lm -ldl
+
+	CXXFLAGS += -I$(MKL_INCLUDE)
+	LDFLAGS += -L$(MKL_LIB) $(MKL_LIBS)
+
 	ifeq ($(HOST_NAME), epyc)
 		IGP_INCDIR = /opt/igraph-1.0.1/include
 		IGP_LIBDIR = /opt/igraph-1.0.1/lib
 		CXXFLAGS += -I$(IGP_INCDIR) 
 		LDFLAGS += -L$(IGP_LIBDIR) -ligraph -lopenblas
+	endif
+
+	ifeq ($(USER_NAME), a30029)  # 北大
+		IGP_INCDIR = $(HOME)/igraph-1.0.1/include
+        IGP_LIBDIR = $(HOME)/igraph-1.0.1/lib64
+		CXXFLAGS += -I$(IGP_INCDIR) 
+		LDFLAGS += -L$(IGP_LIBDIR) -ligraph
 	endif
 
 	GVE_OMP_CXXFLAGS = -fopenmp
