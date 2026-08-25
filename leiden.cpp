@@ -15,7 +15,7 @@ extern "C" {
 }
 
 // Leiden法によるクラスタリング
-std::vector<int> Leiden_from_Graph(const Graph& G, double resolution)
+std::vector<int> Leiden_from_Graph(const Graph& G, double resolution, double& quality_out)
 {
     igraph_rng_seed(igraph_rng_default(), 42u);
 
@@ -94,6 +94,8 @@ std::vector<int> Leiden_from_Graph(const Graph& G, double resolution)
         result[static_cast<size_t>(i)] =
             static_cast<int>(VECTOR(membership)[i]);
     }
+
+    quality_out = static_cast<double>(quality);
 
     igraph_vector_int_destroy(&membership);
     igraph_destroy(&ig);
@@ -193,7 +195,9 @@ int main(int argc, char** argv) {
 
     auto after_read_to_write_begin = Clock::now();
 
-    std::vector<int> block_of = Leiden_from_Graph(G, resolution);
+    double leiden_quality = 0.0;
+
+    std::vector<int> block_of = Leiden_from_Graph(G, resolution, leiden_quality);
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
@@ -254,8 +258,10 @@ int main(int argc, char** argv) {
     double Q = Modularity_Unweighted(G, dense);
 
     std::cout << "time = " << elapsed_seconds(after_read_to_write_begin, after_read_to_write_end)
-              << " NB = " << nb
-              << " NC = " << nc
-              << " modularity = " << Q << "\n";
+              << ", NB = " << nb
+              << ", NC = " << nc
+              << ", gamma = " << resolution
+              << ", quality = " << leiden_quality
+              << ", modularity = " << Q << "\n";
     return 0;
 }
