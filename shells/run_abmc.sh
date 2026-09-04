@@ -4,8 +4,8 @@ export OMP_NUM_THREADS=32
 
 CMD="./abmc"
 BLOCKS="32 64 128 256 512 1024"
-POL="1"
-COL="1"
+POL="1 2 3"
+COL="1 2 3"
 
 
 TARGET_DIR="../1_florida"

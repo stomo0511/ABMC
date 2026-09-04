@@ -15,9 +15,9 @@ extern "C" {
 }
 
 // Leiden法によるクラスタリング
-std::vector<int> Leiden_from_Graph(const Graph& G, double resolution, double& quality_out)
+std::vector<int> Leiden_from_Graph(const Graph& G, double resolution, unsigned long seed, double& quality_out)
 {
-    igraph_rng_seed(igraph_rng_default(), 42u);
+    igraph_rng_seed(igraph_rng_default(), static_cast<igraph_uint_t>(seed));
 
     igraph_t ig;
     if (igraph_empty(&ig,
@@ -173,31 +173,42 @@ std::string sanitize_resolution_for_filename(const std::string& s)
 }
 
 int main(int argc, char** argv) {
-    if (argc < 3 || argc > 4) {
+    if (argc < 3 || argc > 5) {
         std::fprintf(stderr,
-                    "usage: %s <resolution> <matrix.mtx> [coloring(1|2|3)]\n",
+                    "usage: %s <matrix.mtx> <resolution> [coloring(1|2|3)] [seed]\n",
                     argv[0]);
         return 1;
     }
 
     char* end = nullptr;
     errno = 0;
-    double resolution = std::strtod(argv[1], &end);
+    double resolution = std::strtod(argv[2], &end);
     if (errno != 0 || end == argv[1] || *end != '\0') {
-        std::fprintf(stderr, "invalid resolution: %s\n", argv[1]);
+        std::fprintf(stderr, "invalid resolution: %s\n", argv[2]);
         return 1;
     }
 
     int c_in = (argc >= 4) ? std::atoi(argv[3]) : 1;  // 彩色ルーチン選択
     if (c_in < 1 || c_in > 3) c_in = 1;
 
-    Graph G = Read_MM_UD(argv[2]);    // 疎行列の隣接グラフ（無向グラフ）
+    Graph G = Read_MM_UD(argv[1]);    // 疎行列の隣接グラフ（無向グラフ）
+
+    unsigned long seed = 42u;  // デフォルトのシード値
+    if (argc >= 5) {
+        char* seed_end = nullptr;
+        errno = 0;
+        seed = std::strtoul(argv[4], &seed_end, 10);
+        if (errno != 0 || seed_end == argv[4] || *seed_end != '\0') {
+            std::fprintf(stderr, "invalid seed: %s\n", argv[4]);
+            return 1;
+        }
+    }
 
     auto after_read_to_write_begin = Clock::now();
 
     double leiden_quality = 0.0;
 
-    std::vector<int> block_of = Leiden_from_Graph(G, resolution, leiden_quality);
+    std::vector<int> block_of = Leiden_from_Graph(G, resolution, seed, leiden_quality);
     std::vector<int> sizes;
     auto dense = relabel_dense(block_of, &sizes);
     int nb = sizes.size();   // コミュニティの数（= ブロック数）
@@ -235,14 +246,14 @@ int main(int argc, char** argv) {
     auto after_read_to_write_end = Clock::now();
 
     // 出力ファイル名は <入力行列のstem>.blk, <stem>.bcol
-    std::string stem = file_stem(argv[2]);
+    std::string stem = file_stem(argv[1]);
 #ifdef CPM
     stem += "_leiden_cpm";
 #else
     stem += "_leiden";
 #endif
 
-    stem += "_r" + sanitize_resolution_for_filename(argv[1]);
+    stem += "_r" + sanitize_resolution_for_filename(argv[2]);
     stem += "_c" + std::to_string(c_in);
 
     std::string blk_path  = stem + ".blk";
@@ -261,7 +272,8 @@ int main(int argc, char** argv) {
               << ", NB = " << nb
               << ", NC = " << nc
               << ", gamma = " << resolution
-              << ", quality = " << leiden_quality
-              << ", modularity = " << Q << "\n";
+              << ", seed = " << seed
+              << ", quality = " << leiden_quality << "\n";
+            //   << ", modularity = " << Q << "\n";
     return 0;
 }
